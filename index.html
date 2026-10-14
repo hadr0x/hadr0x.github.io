@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analisi Flare</title>
+<meta name="description" content="Analisi del flare da file GPS FlySight di tuta alare, direttamente nel browser.">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js" defer></script>
+<script src="app.js" defer></script>
+</head>
+<body>
+<main>
+  <header class="top">
+    <h1>Analisi Flare</h1>
+    <p class="lede">Carica uno o più file del FlySight: trovo i flare del volo, li misuro e li metto a confronto.
+      I file restano sul tuo computer, l'analisi gira tutta nel browser.</p>
+  </header>
+
+  <section class="input">
+    <label class="drop" id="drop">
+      <input type="file" id="files" accept=".csv,.CSV" multiple>
+      <span class="drop-title">Trascina qui i file CSV</span>
+      <span class="drop-sub">oppure clicca per sceglierli · FlySight 1, FlySight 2 (TRACK.CSV) o CSV di skyderby</span>
+    </label>
+
+    <details class="manual">
+      <summary>Intervallo manuale</summary>
+      <p>Normalmente il volo viene trovato da solo (dall'uscita all'apertura). Se non funziona,
+        indica tu dove cercare il flare, in secondi dall'inizio del file.</p>
+      <div class="manual-row">
+        <label>da <input type="number" id="da" step="1" min="0" inputmode="decimal"> s</label>
+        <label>a <input type="number" id="a" step="1" min="0" inputmode="decimal"> s</label>
+        <button type="button" id="rerun" disabled>Rianalizza</button>
+      </div>
+    </details>
+
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+  </section>
+
+  <div id="results"></div>
+
+  <details class="help">
+    <summary>Come leggere i dati</summary>
+    <dl>
+      <dt>Velocità</dt>
+      <dd>Tutte in km/h. <b>V orizzontale</b> è quanto vai avanti, <b>V verticale</b> quanto scendi
+        (positiva = discesa, negativa = stai salendo), <b>V totale</b> è la combinazione delle due.</dd>
+      <dt>Inizio flare</dt>
+      <dd>L'ultimo momento in cui scendi alla massima velocità verticale prima del culmine: da lì in poi
+        stai tirando su.</dd>
+      <dt>V verticale minima</dt>
+      <dd>Il punto in cui scendi più piano. Se è negativa, in quel momento stavi salendo.</dd>
+      <dt>Quota persa prima di risalire</dt>
+      <dd>Quanto sei sceso dall'inizio del flare al punto più basso.</dd>
+      <dt>Quota guadagnata / durata della salita</dt>
+      <dd>Quanto sei risalito dal punto più basso al culmine, e in quanto tempo. Se non sei mai salito c'è un trattino.</dd>
+      <dt>Efficienza</dt>
+      <dd>V orizzontale diviso V verticale: quanti metri avanti per ogni metro di discesa.
+        “salita” se stavi salendo, ∞ se eri praticamente in piano.</dd>
+      <dt>G</dt>
+      <dd>Il carico che senti: 1 G è il volo stabile, di più significa che stai tirando.</dd>
+      <dt>Rendimento velocità→quota</dt>
+      <dd>Quanta della velocità persa durante la salita è diventata quota. 100% sarebbe una conversione
+        perfetta senza resistenza dell'aria; valori più alti = flare più pulito.</dd>
+      <dt>Precisione</dt>
+      <dd>Con file a 1 punto al secondo i valori di picco (V minima, G) sono approssimati.</dd>
+    </dl>
+  </details>
+
+  <footer>Analisi fatta con <code>flare.py</code> eseguito nel browser tramite Pyodide.</footer>
+</main>
+</body>
+</html>

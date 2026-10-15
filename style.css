@@ -175,3 +175,63 @@ tr.marked td { background: var(--band); }
   .card { padding: 16px; }
 }
 footer { margin-top: 32px; color: var(--muted); font-size: 12px; }
+
+/* ------------------------------------------------------------ site nav */
+.sitenav { display: flex; flex-wrap: wrap; gap: 4px; margin: -12px 0 20px; font-size: 14px; }
+.sitenav a {
+  color: var(--ink-2); text-decoration: none; padding: 5px 12px; border-radius: 999px;
+  border: 1px solid transparent;
+}
+.sitenav a:hover { color: var(--ink); border-color: var(--axis); }
+.sitenav a[aria-current="page"] { color: var(--ink); background: var(--surface); border-color: var(--border); font-weight: 600; }
+
+/* ----------------------------------------------------------------- PPC */
+[hidden] { display: none !important; }
+#app { display: flex; flex-direction: column; gap: 24px; margin-top: 16px; }
+.pick { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }
+select, .ppc-settings input[type="number"] {
+  font: inherit; font-size: 14px; padding: 6px 8px; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--axis); border-radius: 6px; max-width: 100%;
+}
+.ppc-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 24px; }
+@media (max-width: 760px) { .ppc-layout { grid-template-columns: 1fr; } }
+.ppc-settings { display: flex; flex-direction: column; gap: 16px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.field .hint { margin: 0; }
+.window-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.window-row label { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink-2); }
+.window-row input[type="number"] { width: 96px; }
+.lane-row input[type="number"] { width: 130px; }
+.ppc-settings input:disabled { opacity: .5; }
+.updown { display: inline-flex; }
+.updown button { padding: 6px 10px; }
+.updown button:first-child { border-radius: 6px 0 0 6px; }
+.updown button:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
+.check { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.check.small { font-size: 13px; color: var(--ink-2); margin-bottom: 8px; }
+.seg { display: inline-flex; border: 1px solid var(--axis); border-radius: 8px; padding: 2px; width: max-content; max-width: 100%; }
+.seg button { border: none; background: none; border-radius: 6px; padding: 6px 14px; color: var(--ink-2); }
+.seg button[aria-checked="true"] { background: var(--accent); color: #fff; }
+.seg button:hover:not([aria-checked="true"]) { color: var(--ink); }
+
+.score { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border-radius: 10px; background: var(--band); margin-bottom: 12px; }
+.score-label { font-size: 13px; color: var(--ink-2); font-weight: 600; }
+.score-value { font-size: 34px; font-weight: 650; line-height: 1.15; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.score-value small, .stats dd small { font-size: 0.5em; font-weight: 500; color: var(--ink-2); }
+.stats { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0 0 12px; align-items: baseline; }
+.stats dt { color: var(--ink-2); font-size: 14px; }
+.stats dd { margin: 0; font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stats dd small { font-size: 13px; }
+.stats .on { color: var(--accent); }
+.stats.small dd { font-size: 16px; }
+.air { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 4px; }
+.air-title { font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 0 0 8px; }
+.panel-title { fill: var(--ink-2); font-size: 12px; }
+.key.dash { background: none !important; border-top: 2px dashed var(--c); height: 0; }
+.lane { fill: var(--band); stroke: var(--accent); stroke-width: 1; stroke-dasharray: 4 3; }
+.arrow { vertical-align: -3px; color: var(--ink); }
+#wind .scroll { margin-bottom: 8px; }
+#wind td:nth-child(3), #wind th:nth-child(3) { text-align: left; }
+#app .block-head { flex-wrap: wrap; }
+#app .block-head h3 { margin-right: auto; }

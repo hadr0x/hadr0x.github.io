@@ -74,6 +74,17 @@
           </div>
 
           <div class="field">
+            <div class="window-row">
+              <label class="check"><input type="checkbox" id="high-on"> Uscite alte: parti da</label>
+              <input type="number" id="high-from" step="100" inputmode="decimal" aria-label="Quota di partenza per le uscite alte (m)">
+              <span class="hint" style="margin:0">m</span>
+            </div>
+            <p class="hint">Se esci più di 500 m sopra questa quota (es. a 4200 invece che a 3200), il punto di partenza
+              della corsia e il controllo del GPS iniziano quando passi questa quota, come se fossi uscito lì.
+              La finestra di gara non cambia.</p>
+          </div>
+
+          <div class="field">
             <label class="check"><input type="checkbox" id="lane-on"> Corsia designata (Draw lane)</label>
             <div class="window-row lane-row">
               <label>Lat <input type="number" id="lane-lat" step="0.0000001" inputmode="decimal"></label>
@@ -93,7 +104,7 @@
     <section class="card" id="lane-card" hidden>
       <h3>Traiettoria e corsia</h3>
       <p class="hint">Vista dall'alto con la corsia in orizzontale: si vola da sinistra verso il Ground Reference Point.
-        In evidenza il tratto controllato, dal punto dei 9 s all'uscita dalla finestra.</p>
+        In evidenza il tratto controllato, dal punto dei 9 s (o dalla quota di partenza nelle uscite alte) all'uscita dalla finestra.</p>
       <div id="plan"></div>
     </section>
 
@@ -133,6 +144,9 @@
       <dt>SEP</dt>
       <dd>Precisione stimata del GPS (0,5127 × (2·hAcc + vAcc)), il valore peggiore tra 20 m sopra il Top e 20 m sotto il Bottom.
         Più è basso, meglio è.</dd>
+      <dt>Uscite alte</dt>
+      <dd>Con l'opzione attiva, se l'uscita è più di 500 m sopra la quota indicata (di default 3200 m) il salto viene
+        considerato da quella quota: lì parte la corsia (al posto del punto dei 9 s) e il controllo del GPS.</dd>
       <dt>Corsia</dt>
       <dd>Regola FAI 5.6.2: dal punto dei 9 s all'uscita dalla finestra non devi uscire dalla corsia larga 600 m.
         La distanza fuori corsia è misurata ad angolo retto dal bordo; il risultato penalizzato è arrotondato

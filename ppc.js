@@ -19,6 +19,7 @@ const $ = (sel) => document.querySelector(sel);
 const DEFAULTS = {
   mode: "time", top: 2500, bottom: 1500,
   laneOn: false, laneLat: 44.6979994, laneLon: 10.6719158, repeat: false,
+  highOn: true, highFrom: 3200,
   model: "gfs_seamless",
 };
 const settings = loadSettings();
@@ -197,10 +198,10 @@ function prepare(name, text) {
     const p1 = pts[i - 1], p2 = pts[i];
     if (p1.tr > 0 && p1.vd < 10 && p2.vd >= 10) { perf = lerpPoint(p1, p2, (10 - p1.vd) / (p2.vd - p1.vd)); break; }
   }
-  const laneStart = interpAt(pts, "tr", perf.tr + 9);
+  const start9 = interpAt(pts, "tr", perf.tr + 9);
 
   return {
-    name, format, pts, exitT, ex, laneStart,
+    name, format, pts, exitT, ex, start9,
     hz: Math.round((pts.length - 1) / (pts[pts.length - 1].t - pts[0].t)),
     landing: pts[pts.length - 1].h, ground: pts[pts.length - 1].h, groundAuto: true,
     windCache: {},
@@ -244,7 +245,7 @@ function maxSep(pts, top, bottom) {
 function validation(j, bottom) {
   let max = null;
   for (const p of j.pts) {
-    if (p.tr < j.laneStart.tr) continue;
+    if (p.tr < j.start.tr) continue;
     if (p.z < bottom - 20) break;
     const v = 0.5127 * (2 * p.ha + p.va);
     if (Number.isFinite(v) && (max === null || v > max)) max = v;
@@ -252,10 +253,26 @@ function validation(j, bottom) {
   return max === null ? null : { max, ok: max < 10 };
 }
 
+function crossDown(pts, alt) {
+  for (let i = 1; i < pts.length; i++) {
+    const p1 = pts[i - 1], p2 = pts[i];
+    if (p2.tr >= 0 && p1.z >= alt && p2.z < alt) return lerpPoint(p1, p2, (alt - p1.z) / (p2.z - p1.z));
+  }
+  return null;
+}
+
 function compute(j) {
   const { top, bottom } = settings;
   for (const p of j.pts) p.z = p.h - j.ground;
   j.exitZ = j.ex.h - j.ground;
+  j.start9.z = j.start9.h - j.ground;
+
+  // uscite alte (es. 4200 invece di 3200): il punto di partenza diventa il passaggio a highFrom
+  j.high = settings.highOn && j.exitZ > settings.highFrom + 500;
+  j.start = (j.high && crossDown(j.pts, settings.highFrom)) || j.start9;
+  if (j.start === j.start9) j.high = false;
+  j.startLabel = j.high ? `${settings.highFrom} m` : "9 s";
+
   j.win = windowBounds(j.pts, top, bottom);
   j.sep = maxSep(j.pts, top, bottom);
   j.valid = validation(j, bottom);
@@ -386,7 +403,7 @@ function toLocal(j, lat, lon) {
 function computeLane(j) {
   j.lane = null;
   if (!settings.laneOn || !Number.isFinite(settings.laneLat) || !Number.isFinite(settings.laneLon)) return;
-  const S = { x: j.laneStart.x, y: j.laneStart.y };
+  const S = { x: j.start.x, y: j.start.y };
   const E = toLocal(j, settings.laneLat, settings.laneLon);
   const len = Math.hypot(E.x - S.x, E.y - S.y);
   if (len < 1 || len > 50000) { j.lane = { S, E, bad: true }; return; }
@@ -396,7 +413,7 @@ function computeLane(j) {
   let worst = null;
   if (j.win) {
     const B = j.win.bottom;
-    const seq = [j.laneStart, ...j.pts.filter((p) => p.tr > j.laneStart.tr && p.tr < B.tr), B];
+    const seq = [j.start, ...j.pts.filter((p) => p.tr > j.start.tr && p.tr < B.tr), B];
     for (const p of seq) {
       const d = (p.x - S.x) * uy - (p.y - S.y) * ux;   // > 0 = a destra della corsia
       if (!worst || Math.abs(d) > Math.abs(worst.d)) worst = { d, tr: p.tr, z: p.z, p };
@@ -478,6 +495,9 @@ function renderSettings() {
   $("#lane-lon").value = settings.laneLon;
   $("#lane-lat").disabled = $("#lane-lon").disabled = $("#repeat").disabled = !settings.laneOn;
   $("#repeat").checked = settings.repeat;
+  $("#high-on").checked = settings.highOn;
+  $("#high-from").value = settings.highFrom;
+  $("#high-from").disabled = !settings.highOn;
   $("#model").value = settings.model;
   for (const b of document.querySelectorAll(".seg button")) {
     b.setAttribute("aria-checked", String(b.dataset.mode === settings.mode));
@@ -522,9 +542,16 @@ function renderResults(j) {
       : `Dati GPS non validi: SEP fino a ${j.valid.max.toFixed(2)} m nella finestra di validazione (limite 10 m). In gara si avrebbe diritto a un rejump.`));
   }
 
+  if (j.high) {
+    root.append(el("p", { class: "hint" },
+      `Uscita alta (${Math.round(j.exitZ)} m): punto di partenza, corsia e controllo del GPS da ${settings.highFrom} m, ` +
+      "come se fossi uscito lì."));
+  }
+
   const T = j.win.top;
   root.append(el("p", { class: "hint" },
-    `Uscita a ${Math.round(j.exitZ)} m dal suolo · ingresso in finestra ${T.tr.toFixed(1)} s dopo l'uscita, ` +
+    `Uscita a ${Math.round(j.exitZ)} m dal suolo · ingresso in finestra ${T.tr.toFixed(1)} s dopo l'uscita` +
+    (j.high ? ` (${(T.tr - j.start.tr).toFixed(1)} s dopo i ${settings.highFrom} m)` : "") + ", " +
     `a ${Math.round(T.d3)} m di distanza totale · direzione media ${Math.round(r.azi)}° (${cardinal(r.azi)})`));
 
   if (settings.laneOn) root.append(laneBlock(j, r));
@@ -566,7 +593,8 @@ function laneBlock(j, r) {
       el("dd", {}, penalized(m, r, L.penalty), el("small", {}, ` ${MODES[m].unit}`)),
     ]) : [])));
   box.append(el("p", { class: "hint" },
-    `Corsia lunga ${(L.len / 1000).toFixed(2)} km. Dal punto dei 9 s all'uscita dalla finestra ti sei allontanato ` +
+    `Corsia lunga ${(L.len / 1000).toFixed(2)} km. ${j.high ? `Dai ${settings.highFrom} m` : "Dal punto dei 9 s"} ` +
+    "all'uscita dalla finestra ti sei allontanato " +
     `al massimo ${Math.abs(w.d).toFixed(0)} m dal centro, ${side} (${where}). ` +
     (L.out > 0 ? `Sono ${Math.round(L.out)} m oltre il bordo.` : "Sei rimasto dentro la corsia.")));
   return box;
@@ -594,9 +622,9 @@ function renderPlan(j) {
     return { a: dx * L.ux + dy * L.uy, c: dx * L.uy - dy * L.ux };
   };
   const B = j.win.bottom;
-  const shown = j.pts.filter((p) => p.tr >= 0 && (p.tr <= B.tr || p.z > settings.bottom - 150));
+  const shown = j.pts.filter((p) => p.tr >= (j.high ? j.start.tr - 5 : 0) && (p.tr <= B.tr || p.z > settings.bottom - 150));
   const track = shown.map((p) => ({ p, ...toLane(p) }));
-  const checked = [j.laneStart, ...j.pts.filter((p) => p.tr > j.laneStart.tr && p.tr < B.tr), B]
+  const checked = [j.start, ...j.pts.filter((p) => p.tr > j.start.tr && p.tr < B.tr), B]
     .map((p) => ({ p, ...toLane(p) }));
   const worst = { ...toLane(L.worst.p), p: L.worst.p };
 
@@ -671,7 +699,7 @@ function renderPlan(j) {
       svg.append(s("text", { class: "mark-label", x: right ? cx - 7 : cx + 7, y: below ? cy + 15 : cy - 7,
         "text-anchor": right ? "end" : "start" }, label));
     };
-    dot(toLane(j.laneStart), "9 s");
+    dot(toLane(j.start), j.startLabel);
     dot(toLane(j.win.top), "Top", true);
     dot(toLane(B), "Bottom", true);
     dot({ a: L.len, c: 0 }, "Ground ref.");
@@ -881,6 +909,8 @@ function init() {
   $("#ground-auto").addEventListener("click", update(() => { current.ground = current.landing; current.groundAuto = true; }));
   $("#lane-on").addEventListener("change", update(() => { settings.laneOn = $("#lane-on").checked; }));
   $("#repeat").addEventListener("change", update(() => { settings.repeat = $("#repeat").checked; }));
+  $("#high-on").addEventListener("change", update(() => { settings.highOn = $("#high-on").checked; }));
+  $("#high-from").addEventListener("change", update(() => { const v = readNum("#high-from"); if (v != null) settings.highFrom = v; }));
   $("#lane-lat").addEventListener("change", update(() => { const v = readNum("#lane-lat"); if (v != null) settings.laneLat = v; }));
   $("#lane-lon").addEventListener("change", update(() => { const v = readNum("#lane-lon"); if (v != null) settings.laneLon = v; }));
   $("#model").addEventListener("change", update(() => { settings.model = $("#model").value; }));

@@ -90,29 +90,6 @@
 
     <section class="card">
       <div class="block-head">
-        <h3>Andamento del salto</h3>
-        <label class="pick">Vista
-          <select id="view">
-            <option value="exit">Dall'uscita alla finestra</option>
-            <option value="window">Solo finestra</option>
-            <option value="all">Tutto il salto</option>
-          </select>
-        </label>
-      </div>
-      <p class="hint">In funzione della distanza totale percorsa dall'uscita (m). In evidenza la finestra di gara,
-        tratteggiate le quote di Top e Bottom. V verticale positiva = discesa.</p>
-      <label class="check small" id="air-wrap" hidden><input type="checkbox" id="air"> Aggiungi le velocità rispetto all'aria (corrette per il vento)</label>
-      <div id="chart"></div>
-    </section>
-
-    <section class="card" id="lane-card" hidden>
-      <h3>Traccia e corsia</h3>
-      <p class="hint" id="lane-info"></p>
-      <div id="plan"></div>
-    </section>
-
-    <section class="card">
-      <div class="block-head">
         <h3>Vento in quota</h3>
         <label class="pick">Modello
           <select id="model">
@@ -148,7 +125,7 @@
       <dd>Precisione stimata del GPS (0,5127 × (2·hAcc + vAcc)), il valore peggiore tra 20 m sopra il Top e 20 m sotto il Bottom.
         Più è basso, meglio è.</dd>
       <dt>Rispetto all'aria</dt>
-      <dd>Le velocità meno il vento del modello alla quota in cui eri. Il risultato ufficiale resta quello rispetto al suolo:
+      <dd>Distance e Speed tolto il vento del modello alla quota in cui eri. Il risultato ufficiale resta quello rispetto al suolo:
         questi valori servono a capire quanto ti ha aiutato o frenato il vento.</dd>
     </dl>
   </details>

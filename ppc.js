@@ -12,12 +12,6 @@ const MODES = {
   distance: { label: "Distance", unit: "km" },
   speed: { label: "Speed", unit: "km/h" },
 };
-const SPEEDS = [
-  { key: "vt", label: "V totale", color: "var(--s1)" },
-  { key: "vh", label: "V orizzontale", color: "var(--s2)" },
-  { key: "vd", label: "V verticale", color: "var(--s3)" },
-];
-
 const $ = (sel) => document.querySelector(sel);
 
 // --------------------------------------------------------------- settings
@@ -25,7 +19,7 @@ const $ = (sel) => document.querySelector(sel);
 const DEFAULTS = {
   mode: "time", top: 2500, bottom: 1500,
   laneOn: false, laneLat: 44.6979994, laneLon: 10.6719158,
-  view: "exit", model: "gfs_seamless", air: false,
+  model: "gfs_seamless",
 };
 const settings = loadSettings();
 let jumps = [];
@@ -193,11 +187,6 @@ function prepare(name, text) {
       d3 += Math.hypot(p.x - q.x, p.y - q.y, p.h - q.h);
     }
     p.d3 = d3;
-    const vh = Math.hypot(p.vn, p.ve);
-    p.vh = vh * KMH;
-    p.vdk = p.vd * KMH;
-    p.vt = Math.hypot(vh, p.vd) * KMH;
-    p.gr = p.vd > 0.5 ? vh / p.vd : NaN;
   });
   const ex = interpAt(pts, "tr", 0);
   for (const p of pts) { p.d3 -= ex.d3; p.x -= ex.x; p.y -= ex.y; }
@@ -210,17 +199,8 @@ function prepare(name, text) {
   }
   const laneStart = interpAt(pts, "tr", perf.tr + 9);
 
-  // apertura: dopo l'uscita la velocità totale scende sotto 16 m/s per 2 s
-  let deploy = pts.length - 1;
-  for (let i = 0; i < pts.length; i++) {
-    if (pts[i].tr < 10 || pts[i].vt / KMH >= 16) continue;
-    let j = i;
-    while (j < pts.length && pts[j].vt / KMH < 16) j++;
-    if (j >= pts.length || pts[j - 1].t - pts[i].t >= 2) { deploy = i; break; }
-  }
-
   return {
-    name, format, pts, exitT, ex, laneStart, deploy,
+    name, format, pts, exitT, ex, laneStart,
     hz: Math.round((pts.length - 1) / (pts[pts.length - 1].t - pts[0].t)),
     landing: pts[pts.length - 1].h, ground: pts[pts.length - 1].h, groundAuto: true,
     windCache: {},
@@ -352,14 +332,6 @@ function computeAir(j) {
   j.air = null;
   const w = j.windCache[settings.model];
   if (!w) return;
-  for (const p of j.pts) {
-    const v = windAt(w.profile, p.h);
-    p.we = v.e; p.wn = v.n;
-    const ah = Math.hypot(p.ve - v.e, p.vn - v.n);
-    p.avh = ah * KMH;
-    p.avt = Math.hypot(ah, p.vd) * KMH;
-    p.agr = p.vd > 0.5 ? ah / p.vd : NaN;
-  }
   if (!j.res) return;
 
   // vento medio incontrato nella finestra (media nel tempo)
@@ -459,8 +431,6 @@ function renderAll() {
   compute(j);
   renderSettings();
   renderResults(j);
-  renderChart(j);
-  renderLane(j);
   renderWind(j);
 }
 
@@ -473,9 +443,7 @@ function renderSettings() {
   $("#lane-lat").value = settings.laneLat;
   $("#lane-lon").value = settings.laneLon;
   $("#lane-lat").disabled = $("#lane-lon").disabled = !settings.laneOn;
-  $("#view").value = settings.view;
   $("#model").value = settings.model;
-  $("#air").checked = settings.air;
   for (const b of document.querySelectorAll(".seg button")) {
     b.setAttribute("aria-checked", String(b.dataset.mode === settings.mode));
   }
@@ -513,6 +481,9 @@ function renderResults(j) {
     `Uscita a ${Math.round(j.exitZ)} m dal suolo · ingresso in finestra ${T.tr.toFixed(1)} s dopo l'uscita, ` +
     `a ${Math.round(T.d3)} m di distanza totale · direzione media ${Math.round(r.azi)}° (${cardinal(r.azi)})`));
 
+  const lane = laneText(j);
+  if (lane) root.append(el("p", { class: "hint" }, lane));
+
   if (j.air) {
     const a = j.air;
     const tail = a.tail * KMH;
@@ -529,315 +500,14 @@ function renderResults(j) {
   }
 }
 
-// ------------------------------------------------------------- grafico
-
-function niceStep(span, count) {
-  const raw = span / Math.max(1, count);
-  const mag = 10 ** Math.floor(Math.log10(raw));
-  const f = raw / mag;
-  return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * mag;
-}
-function ticks(lo, hi, count) {
-  const step = niceStep(hi - lo || 1, count);
-  const out = [];
-  for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-6; v += step) out.push(+v.toFixed(10));
-  return { step, values: out };
-}
-
-function viewRange(j) {
-  const pts = j.pts;
-  const xEnd = pts[j.deploy].d3;
-  if (!j.win || settings.view === "all") return [0, Math.max(xEnd, j.win ? j.win.bottom.d3 : 0)];
-  const a = j.win.top.d3, b = j.win.bottom.d3;
-  if (settings.view === "window") {
-    const pad = (b - a) * 0.06;
-    return [Math.max(0, a - pad), Math.min(pts[pts.length - 1].d3, b + pad)];
-  }
-  return [0, Math.min(pts[pts.length - 1].d3, b + b * 0.08)];
-}
-
-function renderChart(j) {
-  const [x0, x1] = viewRange(j);
-  const pts = j.pts.filter((p) => p.d3 >= x0 && p.d3 <= x1);
-  const root = $("#chart");
-  root.replaceChildren();
-  $("#air-wrap").hidden = !j.air;
-  if (pts.length < 2) return;
-  const air = settings.air && j.air;
-
-  const speedSeries = SPEEDS.map((sp) => ({ ...sp, values: pts.map((p) => (sp.key === "vd" ? p.vdk : p[sp.key])) }));
-  if (air) {
-    speedSeries.push({ key: "avt", label: "V totale (aria)", color: "var(--s1)", dash: true, values: pts.map((p) => p.avt) });
-    speedSeries.push({ key: "avh", label: "V orizzontale (aria)", color: "var(--s2)", dash: true, values: pts.map((p) => p.avh) });
-  }
-  const glide = [{ key: "gr", label: "Efficienza", color: "var(--ink-2)", values: pts.map((p) => p.gr) }];
-  if (air) glide.push({ key: "agr", label: "Efficienza (aria)", color: "var(--ink-2)", dash: true, values: pts.map((p) => p.agr) });
-
-  const hl = [];
-  if (j.win) hl.push({ y: settings.top, label: `Top ${settings.top}` }, { y: settings.bottom, label: `Bottom ${settings.bottom}` });
-
-  root.append(stackedChart({
-    x: pts.map((p) => p.d3), x0, x1,
-    t: pts.map((p) => p.tr),
-    band: j.win ? { from: j.win.top.d3, to: j.win.bottom.d3 } : null,
-    panels: [
-      { title: "Quota dal suolo (m)", unit: "m", height: 170, digits: 0, hlines: hl,
-        series: [{ key: "z", label: "Quota", color: "var(--accent)", values: pts.map((p) => p.z) }] },
-      { title: "Velocità (km/h)", unit: "km/h", height: 220, digits: 0, legend: true, series: speedSeries },
-      { title: "Efficienza (m avanti per m di discesa)", unit: "", height: 150, digits: 2, cap: 6, floor: 0, series: glide },
-    ],
-  }));
-}
-
-function stackedChart({ x, t, x0, x1, band, panels }) {
-  const wrap = el("div", { class: "chart" });
-  const legendSeries = panels.flatMap((p) => (p.legend ? p.series : []));
-  if (legendSeries.length) {
-    wrap.append(el("div", { class: "legend" }, ...legendSeries.map((sr) =>
-      el("span", {}, el("i", { class: sr.dash ? "key dash" : "key", style: `--c:${sr.color};background:${sr.dash ? "none" : sr.color}` }), sr.label))));
-  }
-  const total = panels.reduce((n, p) => n + p.height + 22, 0) + 22;
-  const svg = s("svg", { role: "img", tabindex: "0",
-    "aria-label": "Grafico di quota, velocità ed efficienza in funzione della distanza totale" });
-  const tip = el("div", { class: "tip", hidden: "" });
-  wrap.append(svg, tip);
-  const uid = Math.random().toString(36).slice(2, 8);
-
-  let lastWidth = 0, state = null, current = null;
-
-  function draw() {
-    const width = Math.round(svg.getBoundingClientRect().width || wrap.clientWidth);
-    if (!width || width === lastWidth) return;
-    lastWidth = width;
-    svg.replaceChildren();
-    svg.setAttribute("viewBox", `0 0 ${width} ${total}`);
-    svg.setAttribute("height", total);
-    const m = { l: 44, r: width >= 480 ? 72 : 12 };
-    const w = width - m.l - m.r;
-    const X = (v) => m.l + ((v - x0) / (x1 - x0 || 1)) * w;
-
-    let top = 0;
-    const laid = [];
-    for (const [pi, p] of panels.entries()) {
-      const pt = top + 18, ph = p.height;
-      svg.append(s("text", { class: "panel-title", x: m.l, y: pt - 6 }, p.title));
-
-      let lo = Infinity, hi = -Infinity;
-      for (const sr of p.series) for (const v of sr.values) if (Number.isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; }
-      for (const h of p.hlines || []) { lo = Math.min(lo, h.y); hi = Math.max(hi, h.y); }
-      if (p.cap != null) hi = Math.min(hi, p.cap);
-      if (p.floor != null) lo = Math.max(Math.min(lo, hi), p.floor);
-      if (!Number.isFinite(lo)) { lo = 0; hi = 1; }
-      const pad = (hi - lo || 1) * 0.06;
-      const yt = ticks(lo - pad, hi + pad, Math.max(3, Math.round(ph / 45)));
-      const y0 = Math.min(yt.values[0], lo - pad), y1 = Math.max(yt.values[yt.values.length - 1], hi + pad);
-      const Y = (v) => pt + (1 - (v - y0) / (y1 - y0 || 1)) * ph;
-
-      if (band) {
-        const bx0 = X(Math.max(x0, band.from)), bx1 = X(Math.min(x1, band.to));
-        if (bx1 > bx0) svg.append(s("rect", { class: "band", x: bx0, y: pt, width: bx1 - bx0, height: ph }));
-        if (pi === 0 && bx1 > bx0) {
-          svg.append(s("text", { class: "band-label", x: (bx0 + bx1) / 2, y: pt - 6, "text-anchor": "middle" }, "Finestra"));
-        }
-      }
-      for (const v of yt.values) {
-        if (v < y0 || v > y1) continue;
-        const yy = Y(v);
-        svg.append(s("line", { class: v === 0 ? "baseline" : "gridline", x1: m.l, x2: m.l + w, y1: yy, y2: yy }));
-        svg.append(s("text", { class: "tick", x: m.l - 6, y: yy + 4, "text-anchor": "end" },
-          v.toFixed(yt.step < 1 ? (yt.step < 0.1 ? 2 : 1) : 0)));
-      }
-      svg.append(s("line", { class: "baseline", x1: m.l, x2: m.l + w, y1: pt + ph, y2: pt + ph }));
-      for (const h of p.hlines || []) {
-        const yy = Y(h.y);
-        svg.append(s("line", { class: "mark-line", x1: m.l, x2: m.l + w, y1: yy, y2: yy }));
-        svg.append(s("text", { class: "mark-label", x: m.l + w - 4, y: yy - 4, "text-anchor": "end" }, h.label));
-      }
-
-      const clip = `c${uid}${pi}`;
-      const cp = s("clipPath", { id: clip });
-      cp.append(s("rect", { x: m.l, y: pt, width: w, height: ph }));
-      svg.append(cp);
-      const g = s("g", { "clip-path": `url(#${clip})` });
-      for (const sr of p.series) {
-        let d = "", pen = false;
-        sr.values.forEach((v, i) => {
-          if (!Number.isFinite(v)) { pen = false; return; }
-          const vv = p.cap != null ? Math.min(v, y1) : v;
-          d += `${pen ? "L" : "M"}${X(x[i]).toFixed(1)},${Y(vv).toFixed(1)}`;
-          pen = true;
-        });
-        g.append(s("path", { d, fill: "none", stroke: sr.color, "stroke-width": sr.dash ? 1.5 : 2,
-          "stroke-dasharray": sr.dash ? "5 4" : "none", "stroke-linejoin": "round", "stroke-linecap": "round" }));
-      }
-      svg.append(g);
-
-      // etichette dirette a destra, per i pannelli con una sola serie piena
-      if (m.r > 20) {
-        const ends = p.series.filter((sr) => !sr.dash).map((sr) => {
-          let k = sr.values.length - 1;
-          while (k > 0 && !Number.isFinite(sr.values[k])) k--;
-          return { sr, y: Y(Math.min(sr.values[k], y1)) };
-        }).sort((a, b) => a.y - b.y);
-        for (let i = 1; i < ends.length; i++) ends[i].y = Math.max(ends[i].y, ends[i - 1].y + 13);
-        for (const e of ends) {
-          const short = e.sr.label.replace("V orizzontale", "V orizz.");
-          svg.append(s("text", { class: "direct", x: m.l + w + 6, y: e.y + 4 }, short));
-        }
-      }
-      laid.push({ p, Y, y1, pt, ph });
-      top = pt + ph + 4;
-    }
-
-    // asse x
-    const xt = ticks(x0, x1, Math.max(2, Math.round(w / 90)));
-    for (const v of xt.values) {
-      svg.append(s("text", { class: "tick", x: X(v), y: top + 12, "text-anchor": "middle" },
-        `${v.toFixed(0)}${v === xt.values[xt.values.length - 1] ? " m" : ""}`));
-    }
-
-    const cross = s("line", { class: "cross", y1: laid[0].pt, y2: top - 4, visibility: "hidden" });
-    const dots = laid.flatMap((L) => L.p.series.map((sr) =>
-      ({ L, sr, c: s("circle", { r: 3.5, fill: sr.color, stroke: "var(--surface)", "stroke-width": 2, visibility: "hidden" }) })));
-    svg.append(cross, ...dots.map((d) => d.c));
-    state = { X, m, w, cross, dots };
-  }
-
-  function show(i) {
-    if (!state) return;
-    const { X, cross, dots, m, w } = state;
-    const xx = X(x[i]);
-    cross.setAttribute("x1", xx); cross.setAttribute("x2", xx); cross.setAttribute("visibility", "visible");
-    for (const d of dots) {
-      const v = d.sr.values[i];
-      const ok = Number.isFinite(v);
-      d.c.setAttribute("visibility", ok ? "visible" : "hidden");
-      if (ok) { d.c.setAttribute("cx", xx); d.c.setAttribute("cy", d.L.Y(Math.min(v, d.L.y1))); }
-    }
-    tip.replaceChildren(el("div", { class: "tip-head" }, `${x[i].toFixed(0)} m · ${t[i].toFixed(1)} s dall'uscita`),
-      ...panels.flatMap((p) => p.series.map((sr) => {
-        const v = sr.values[i];
-        return el("div", { class: "tip-row" },
-          el("i", { class: sr.dash ? "key dash" : "key", style: `--c:${sr.color};background:${sr.dash ? "none" : sr.color}` }),
-          el("b", {}, Number.isFinite(v) ? `${v.toFixed(p.digits)}${p.unit ? " " + p.unit : ""}` : "–"),
-          el("span", {}, sr.label));
-      })));
-    tip.hidden = false;
-    const tw = tip.offsetWidth;
-    const left = xx + 12 + tw > m.l + w ? xx - 12 - tw : xx + 12;
-    tip.style.left = `${Math.max(0, left)}px`;
-    tip.style.top = `${svg.offsetTop + 24}px`;
-    current = i;
-  }
-  function hide() {
-    if (!state) return;
-    state.cross.setAttribute("visibility", "hidden");
-    state.dots.forEach((d) => d.c.setAttribute("visibility", "hidden"));
-    tip.hidden = true;
-  }
-  function nearest(v) {
-    let lo = 0, hi = x.length - 1;
-    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (x[mid] < v) lo = mid; else hi = mid; }
-    return v - x[lo] <= x[hi] - v ? lo : hi;
-  }
-
-  svg.addEventListener("pointermove", (e) => {
-    if (!state) return;
-    const rect = svg.getBoundingClientRect();
-    const px = (e.clientX - rect.left) * (lastWidth / rect.width);
-    const { m, w } = state;
-    if (px < m.l - 8 || px > m.l + w + 8) return hide();
-    show(nearest(x0 + ((px - m.l) / w) * (x1 - x0)));
-  });
-  svg.addEventListener("pointerleave", hide);
-  svg.addEventListener("blur", hide);
-  svg.addEventListener("keydown", (e) => {
-    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-    e.preventDefault();
-    const step = e.shiftKey ? 10 : 1;
-    const i = current == null ? 0 : current + (e.key === "ArrowRight" ? step : -step);
-    show(Math.min(x.length - 1, Math.max(0, i)));
-  });
-
-  new ResizeObserver(draw).observe(wrap);
-  return wrap;
-}
-
-// --------------------------------------------------------- vista dall'alto
-
-function renderLane(j) {
-  const card = $("#lane-card");
-  card.hidden = !settings.laneOn;
-  if (!settings.laneOn) return;
-  const info = $("#lane-info");
-  const root = $("#plan");
-  root.replaceChildren();
+function laneText(j) {
   const L = j.lane;
-  if (!L || L.bad) {
-    info.textContent = "Il punto finale della corsia non è valido o è troppo lontano dal salto (oltre 50 km).";
-    return;
-  }
-  if (j.win) {
-    const dev = Math.abs(L.maxDev);
-    info.textContent = `Corsia lunga ${(L.len / 1000).toFixed(2)} km, larga ${LANE_WIDTH} m. ` +
-      `Nella finestra ti sei allontanato al massimo ${dev.toFixed(0)} m dal centro ` +
-      `(${L.maxDev >= 0 ? "a destra" : "a sinistra"}): ` +
-      (dev <= LANE_WIDTH / 2 ? "sei rimasto dentro la corsia." : "sei uscito dalla corsia.");
-  } else {
-    info.textContent = "";
-  }
-
-  const end = j.win ? j.win.bi + 2 : j.deploy;
-  const track = j.pts.filter((p, i) => p.tr >= 0 && i <= Math.max(end, j.deploy));
-  const half = LANE_WIDTH / 2;
-  const nx = -L.uy * half, ny = L.ux * half;      // normale a sinistra
-  const corners = [
-    { x: L.S.x + nx, y: L.S.y + ny }, { x: L.E.x + nx, y: L.E.y + ny },
-    { x: L.E.x - nx, y: L.E.y - ny }, { x: L.S.x - nx, y: L.S.y - ny },
-  ];
-  const all = [...track, ...corners];
-  const xs = all.map((p) => p.x), ys = all.map((p) => p.y);
-  const bx0 = Math.min(...xs), bx1 = Math.max(...xs), by0 = Math.min(...ys), by1 = Math.max(...ys);
-
-  const wrap = el("div", { class: "chart" });
-  const svg = s("svg", { role: "img", "aria-label": "Vista dall'alto della traccia e della corsia" });
-  wrap.append(svg);
-  root.append(wrap);
-
-  let lastWidth = 0;
-  function draw() {
-    const width = Math.round(svg.getBoundingClientRect().width || wrap.clientWidth);
-    if (!width || width === lastWidth) return;
-    lastWidth = width;
-    svg.replaceChildren();
-    const pad = 16;
-    const k = Math.min((width - 2 * pad) / (bx1 - bx0 || 1), 420 / (by1 - by0 || 1));
-    const height = Math.round((by1 - by0) * k + 2 * pad);
-    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-    svg.setAttribute("height", height);
-    const ox = (width - (bx1 - bx0) * k) / 2;
-    const P = (p) => `${(ox + (p.x - bx0) * k).toFixed(1)},${(pad + (by1 - p.y) * k).toFixed(1)}`;
-
-    svg.append(s("polygon", { class: "lane", points: corners.map(P).join(" ") }));
-    svg.append(s("polyline", { class: "mark-line", points: [L.S, L.E].map(P).join(" "), fill: "none" }));
-    svg.append(s("polyline", { points: track.map(P).join(" "), fill: "none", stroke: "var(--muted)", "stroke-width": 1.5 }));
-    if (j.win) {
-      const seg = [j.win.top, ...j.pts.slice(j.win.ti, j.win.bi), j.win.bottom];
-      svg.append(s("polyline", { points: seg.map(P).join(" "), fill: "none", stroke: "var(--accent)", "stroke-width": 2.5,
-        "stroke-linejoin": "round", "stroke-linecap": "round" }));
-    }
-    const dot = (p, label) => {
-      const [cx, cy] = P(p).split(",").map(Number);
-      svg.append(s("circle", { cx, cy, r: 4, fill: "var(--ink)", stroke: "var(--surface)", "stroke-width": 2 }));
-      const right = cx > width - 90;
-      svg.append(s("text", { class: "mark-label", x: right ? cx - 7 : cx + 7, y: cy - 6,
-        "text-anchor": right ? "end" : "start" }, label));
-    };
-    dot(j.pts.find((p) => p.tr >= 0) || j.pts[0], "Uscita");
-    dot(L.E, "Fine corsia");
-    svg.append(s("text", { class: "tick", x: width - 8, y: 16, "text-anchor": "end" }, "N ↑"));
-  }
-  new ResizeObserver(draw).observe(wrap);
+  if (!settings.laneOn) return "";
+  if (!L || L.bad) return "Corsia: il punto finale non è valido o è troppo lontano dal salto (oltre 50 km).";
+  const dev = Math.abs(L.maxDev);
+  return `Corsia lunga ${(L.len / 1000).toFixed(2)} km, larga ${LANE_WIDTH} m: nella finestra ti sei allontanato ` +
+    `al massimo ${dev.toFixed(0)} m dal centro (${L.maxDev >= 0 ? "a destra" : "a sinistra"}), ` +
+    (dev <= LANE_WIDTH / 2 ? "sei rimasto dentro." : "sei uscito dalla corsia.");
 }
 
 // ------------------------------------------------------------------ vento
@@ -854,7 +524,6 @@ function renderWind(j) {
       if (token !== windToken || j !== current) return;
       computeAir(j);
       renderResults(j);
-      renderChart(j);
       renderWind(j);
     }).catch((e) => {
       if (token !== windToken || j !== current) return;
@@ -999,9 +668,7 @@ function init() {
   $("#lane-on").addEventListener("change", update(() => { settings.laneOn = $("#lane-on").checked; }));
   $("#lane-lat").addEventListener("change", update(() => { const v = readNum("#lane-lat"); if (v != null) settings.laneLat = v; }));
   $("#lane-lon").addEventListener("change", update(() => { const v = readNum("#lane-lon"); if (v != null) settings.laneLon = v; }));
-  $("#view").addEventListener("change", update(() => { settings.view = $("#view").value; }));
   $("#model").addEventListener("change", update(() => { settings.model = $("#model").value; }));
-  $("#air").addEventListener("change", update(() => { settings.air = $("#air").checked; }));
 }
 
 init();

@@ -79,13 +79,22 @@
               <label>Lat <input type="number" id="lane-lat" step="0.0000001" inputmode="decimal"></label>
               <label>Lon <input type="number" id="lane-lon" step="0.0000001" inputmode="decimal"></label>
             </div>
-            <p class="hint">Punto finale della corsia. La corsia parte da dove sei 9 s dopo aver raggiunto 10 m/s
-              in verticale ed è larga 600 m. Non cambia il risultato, serve a controllare se sei rimasto dentro.</p>
+            <label class="check small"><input type="checkbox" id="repeat"> Ho già avuto un'infrazione oltre 300 m in un salto precedente</label>
+            <p class="hint">Lat/Lon del Ground Reference Point. La corsia va dal punto dei 9 s (9 s dopo aver
+              raggiunto 10 m/s in verticale) a questo punto ed è larga 600 m. Fuori corsia fino a 150 m: −10%,
+              da 150 a 300 m: −20%, oltre 300 m: −50% (risultato zero se è già successo in un salto precedente).</p>
           </div>
         </div>
 
         <div class="ppc-results" id="results"></div>
       </div>
+    </section>
+
+    <section class="card" id="lane-card" hidden>
+      <h3>Traiettoria e corsia</h3>
+      <p class="hint">Vista dall'alto con la corsia in orizzontale: si vola da sinistra verso il Ground Reference Point.
+        In evidenza il tratto controllato, dal punto dei 9 s all'uscita dalla finestra.</p>
+      <div id="plan"></div>
     </section>
 
     <section class="card">
@@ -124,6 +133,13 @@
       <dt>SEP</dt>
       <dd>Precisione stimata del GPS (0,5127 × (2·hAcc + vAcc)), il valore peggiore tra 20 m sopra il Top e 20 m sotto il Bottom.
         Più è basso, meglio è.</dd>
+      <dt>Corsia</dt>
+      <dd>Regola FAI 5.6.2: dal punto dei 9 s all'uscita dalla finestra non devi uscire dalla corsia larga 600 m.
+        La distanza fuori corsia è misurata ad angolo retto dal bordo; il risultato penalizzato è arrotondato
+        a un decimale per Time e Speed e al metro per Distance (5.10.1).</dd>
+      <dt>Dati GPS validi</dt>
+      <dd>Regola FAI 5.7.4: dal punto dei 9 s fino a 20 m sotto il Bottom ogni punto deve avere SEP sotto i 10 m,
+        altrimenti in gara si ha diritto a un rejump.</dd>
       <dt>Rispetto all'aria</dt>
       <dd>Distance e Speed tolto il vento del modello alla quota in cui eri. Il risultato ufficiale resta quello rispetto al suolo:
         questi valori servono a capire quanto ti ha aiutato o frenato il vento.</dd>

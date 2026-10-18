@@ -18,7 +18,7 @@ const $ = (sel) => document.querySelector(sel);
 
 const DEFAULTS = {
   mode: "time", top: 2500, bottom: 1500,
-  laneOn: false, laneLat: 44.6979994, laneLon: 10.6719158,
+  laneOn: false, laneLat: 44.6979994, laneLon: 10.6719158, repeat: false,
   model: "gfs_seamless",
 };
 const settings = loadSettings();
@@ -239,12 +239,26 @@ function maxSep(pts, top, bottom) {
   return sep;
 }
 
+// regola 5.7.4: nella finestra di validazione (dal punto dei 9 s a 20 m sotto il Bottom)
+// ogni campione deve avere SEP < 10 m
+function validation(j, bottom) {
+  let max = null;
+  for (const p of j.pts) {
+    if (p.tr < j.laneStart.tr) continue;
+    if (p.z < bottom - 20) break;
+    const v = 0.5127 * (2 * p.ha + p.va);
+    if (Number.isFinite(v) && (max === null || v > max)) max = v;
+  }
+  return max === null ? null : { max, ok: max < 10 };
+}
+
 function compute(j) {
   const { top, bottom } = settings;
   for (const p of j.pts) p.z = p.h - j.ground;
   j.exitZ = j.ex.h - j.ground;
   j.win = windowBounds(j.pts, top, bottom);
   j.sep = maxSep(j.pts, top, bottom);
+  j.valid = validation(j, bottom);
   j.res = null;
   if (j.win) {
     const { top: T, bottom: B } = j.win;
@@ -377,15 +391,34 @@ function computeLane(j) {
   const len = Math.hypot(E.x - S.x, E.y - S.y);
   if (len < 1 || len > 50000) { j.lane = { S, E, bad: true }; return; }
   const ux = (E.x - S.x) / len, uy = (E.y - S.y) / len;
-  let maxDev = 0;
+  // regola 5.6.2: controllo dall'inizio della finestra di validazione (punto dei 9 s)
+  // all'uscita dalla finestra di gara, distanza misurata ad angolo retto dal bordo
+  let worst = null;
   if (j.win) {
-    const { top: T, bottom: B, ti, bi } = j.win;
-    for (const p of [T, ...j.pts.slice(ti, bi), B]) {
+    const B = j.win.bottom;
+    const seq = [j.laneStart, ...j.pts.filter((p) => p.tr > j.laneStart.tr && p.tr < B.tr), B];
+    for (const p of seq) {
       const d = (p.x - S.x) * uy - (p.y - S.y) * ux;   // > 0 = a destra della corsia
-      if (Math.abs(d) > Math.abs(maxDev)) maxDev = d;
+      if (!worst || Math.abs(d) > Math.abs(worst.d)) worst = { d, tr: p.tr, z: p.z, p };
     }
   }
-  j.lane = { S, E, ux, uy, len, maxDev };
+  const out = worst ? Math.abs(worst.d) - LANE_WIDTH / 2 : 0;
+  j.lane = { S, E, ux, uy, len, worst, out, penalty: lanePenalty(out) };
+}
+
+function lanePenalty(out) {
+  if (out <= 0) return 0;
+  if (out < 150) return 0.1;
+  if (out <= 300) return 0.2;
+  return settings.repeat ? 1 : 0.5;
+}
+
+// risultato penalizzato, arrotondato come nella regola 5.10.1
+function penalized(mode, r, pen) {
+  const k = 1 - pen;
+  if (mode === "time") return (Math.round(r.time * k * 10) / 10).toFixed(1);
+  if (mode === "distance") return (Math.round(r.distance * k) / 1000).toFixed(3);
+  return (Math.round(r.speed * KMH * k * 10) / 10).toFixed(1);
 }
 
 // ----------------------------------------------------------------- render
@@ -431,6 +464,7 @@ function renderAll() {
   compute(j);
   renderSettings();
   renderResults(j);
+  renderPlan(j);
   renderWind(j);
 }
 
@@ -442,7 +476,8 @@ function renderSettings() {
   $("#lane-on").checked = settings.laneOn;
   $("#lane-lat").value = settings.laneLat;
   $("#lane-lon").value = settings.laneLon;
-  $("#lane-lat").disabled = $("#lane-lon").disabled = !settings.laneOn;
+  $("#lane-lat").disabled = $("#lane-lon").disabled = $("#repeat").disabled = !settings.laneOn;
+  $("#repeat").checked = settings.repeat;
   $("#model").value = settings.model;
   for (const b of document.querySelectorAll(".seg button")) {
     b.setAttribute("aria-checked", String(b.dataset.mode === settings.mode));
@@ -461,9 +496,14 @@ function renderResults(j) {
     return;
   }
   const mode = settings.mode;
+  const L = settings.laneOn && j.lane && !j.lane.bad && j.lane.worst ? j.lane : null;
+  const pen = L ? L.penalty : 0;
   root.append(el("div", { class: "score" },
-    el("span", { class: "score-label" }, `${MODES[mode].label} · risultato`),
-    el("span", { class: "score-value" }, formatMode(mode, r), el("small", {}, ` ${MODES[mode].unit}`))));
+    el("span", { class: "score-label" },
+      `${MODES[mode].label} · ${pen === 1 ? "risultato zero (infrazione ripetuta)" : pen ? `risultato con penalità −${Math.round(pen * 100)}%` : "risultato"}`),
+    el("span", { class: "score-value" }, pen ? penalized(mode, r, pen) : formatMode(mode, r),
+      el("small", {}, ` ${MODES[mode].unit}`)),
+    pen ? el("span", { class: "score-label" }, `senza penalità ${formatMode(mode, r)} ${MODES[mode].unit}`) : null));
 
   const rows = [
     ["time", "Time", r.time.toFixed(3), "s"],
@@ -476,13 +516,18 @@ function renderResults(j) {
     el("dd", { class: k === mode ? "on" : "" }, v, el("small", {}, u ? ` ${u}` : "")),
   ])));
 
+  if (j.valid) {
+    root.append(el("p", { class: j.valid.ok ? "hint" : "err" }, j.valid.ok
+      ? `Dati GPS validi: SEP massimo ${j.valid.max.toFixed(2)} m nella finestra di validazione (limite 10 m).`
+      : `Dati GPS non validi: SEP fino a ${j.valid.max.toFixed(2)} m nella finestra di validazione (limite 10 m). In gara si avrebbe diritto a un rejump.`));
+  }
+
   const T = j.win.top;
   root.append(el("p", { class: "hint" },
     `Uscita a ${Math.round(j.exitZ)} m dal suolo · ingresso in finestra ${T.tr.toFixed(1)} s dopo l'uscita, ` +
     `a ${Math.round(T.d3)} m di distanza totale · direzione media ${Math.round(r.azi)}° (${cardinal(r.azi)})`));
 
-  const lane = laneText(j);
-  if (lane) root.append(el("p", { class: "hint" }, lane));
+  if (settings.laneOn) root.append(laneBlock(j, r));
 
   if (j.air) {
     const a = j.air;
@@ -500,14 +545,183 @@ function renderResults(j) {
   }
 }
 
-function laneText(j) {
+function laneBlock(j, r) {
   const L = j.lane;
-  if (!settings.laneOn) return "";
-  if (!L || L.bad) return "Corsia: il punto finale non è valido o è troppo lontano dal salto (oltre 50 km).";
-  const dev = Math.abs(L.maxDev);
-  return `Corsia lunga ${(L.len / 1000).toFixed(2)} km, larga ${LANE_WIDTH} m: nella finestra ti sei allontanato ` +
-    `al massimo ${dev.toFixed(0)} m dal centro (${L.maxDev >= 0 ? "a destra" : "a sinistra"}), ` +
-    (dev <= LANE_WIDTH / 2 ? "sei rimasto dentro." : "sei uscito dalla corsia.");
+  const box = el("div", { class: "air" }, el("p", { class: "air-title" }, "Corsia designata"));
+  if (!L || L.bad) {
+    box.append(el("p", { class: "err" }, "Il punto finale della corsia non è valido o è troppo lontano dal salto (oltre 50 km)."));
+    return box;
+  }
+  const w = L.worst;
+  const side = w.d >= 0 ? "a destra" : "a sinistra";
+  const where = `${w.tr.toFixed(1)} s dopo l'uscita, a ${Math.round(w.z)} m`;
+  const label = L.penalty === 0 ? "nessuna"
+    : L.penalty === 1 ? "risultato zero (infrazione ripetuta)"
+    : `−${Math.round(L.penalty * 100)}%`;
+  box.append(el("dl", { class: "stats small" },
+    el("dt", {}, "Fuori corsia"), el("dd", {}, L.out > 0 ? `${Math.round(L.out)}` : "0", el("small", {}, " m")),
+    el("dt", {}, "Penalità"), el("dd", L.penalty ? { style: "color:var(--error)" } : {}, label),
+    ...(L.penalty ? Object.keys(MODES).flatMap((m) => [
+      el("dt", {}, `${MODES[m].label} penalizzato`),
+      el("dd", {}, penalized(m, r, L.penalty), el("small", {}, ` ${MODES[m].unit}`)),
+    ]) : [])));
+  box.append(el("p", { class: "hint" },
+    `Corsia lunga ${(L.len / 1000).toFixed(2)} km. Dal punto dei 9 s all'uscita dalla finestra ti sei allontanato ` +
+    `al massimo ${Math.abs(w.d).toFixed(0)} m dal centro, ${side} (${where}). ` +
+    (L.out > 0 ? `Sono ${Math.round(L.out)} m oltre il bordo.` : "Sei rimasto dentro la corsia.")));
+  return box;
+}
+
+// ------------------------------------------------------- traiettoria e corsia
+
+// fasce di penalità dal centro della corsia (Addendum C): 300 / 450 / 600 m
+const BANDS = [
+  { from: 450, to: 600, fill: "var(--error)", opacity: 0.22, label: "−20%" },
+  { from: 300, to: 450, fill: "#e5a50a", opacity: 0.30, label: "−10%" },
+];
+
+function renderPlan(j) {
+  const card = $("#lane-card");
+  const root = $("#plan");
+  root.replaceChildren();
+  const L = j.lane;
+  card.hidden = !(settings.laneOn && L && !L.bad && j.win);
+  if (card.hidden) return;
+
+  // coordinate lungo la corsia (a) e di traverso (c, > 0 = a destra del volo)
+  const toLane = (p) => {
+    const dx = p.x - L.S.x, dy = p.y - L.S.y;
+    return { a: dx * L.ux + dy * L.uy, c: dx * L.uy - dy * L.ux };
+  };
+  const B = j.win.bottom;
+  const shown = j.pts.filter((p) => p.tr >= 0 && (p.tr <= B.tr || p.z > settings.bottom - 150));
+  const track = shown.map((p) => ({ p, ...toLane(p) }));
+  const checked = [j.laneStart, ...j.pts.filter((p) => p.tr > j.laneStart.tr && p.tr < B.tr), B]
+    .map((p) => ({ p, ...toLane(p) }));
+  const worst = { ...toLane(L.worst.p), p: L.worst.p };
+
+  const aMin = Math.min(0, ...track.map((q) => q.a)) - 150;
+  const aMax = Math.max(L.len, ...track.map((q) => q.a)) + 150;
+  const cMax = Math.max(700, ...track.map((q) => Math.abs(q.c) + 100));
+
+  const wrap = el("div", { class: "chart" });
+  const svg = s("svg", { role: "img", tabindex: "0",
+    "aria-label": `Traiettoria vista dall'alto con la corsia e le fasce di penalità; massimo ${Math.round(L.out > 0 ? L.out : 0)} m fuori corsia` });
+  const tip = el("div", { class: "tip", hidden: "" });
+  wrap.append(svg, tip);
+  root.append(wrap,
+    el("div", { class: "legend" },
+      el("span", {}, el("i", { class: "key", style: "background:var(--accent);height:3px" }), "tratto controllato"),
+      el("span", {}, el("i", { class: "key", style: "background:var(--muted)" }), "resto del volo"),
+      el("span", {}, el("i", { class: "key", style: "background:#e5a50a;opacity:.6;height:8px" }), "fino a 150 m fuori: −10%"),
+      el("span", {}, el("i", { class: "key", style: "background:var(--error);opacity:.5;height:8px" }), "150–300 m fuori: −20%"),
+      el("span", {}, "oltre 300 m fuori: −50%")));
+
+  let lastWidth = 0, state = null;
+  function draw() {
+    const width = Math.round(svg.getBoundingClientRect().width || wrap.clientWidth);
+    if (!width || width === lastWidth) return;
+    lastWidth = width;
+    svg.replaceChildren();
+    const m = { l: 8, r: 8, t: 8, b: 8 };
+    const k = (width - m.l - m.r) / (aMax - aMin);
+    // su schermi stretti allarga il traverso, altrimenti le fasce diventano illeggibili
+    const ky = Math.max(k, (240 - m.t - m.b) / (2 * cMax));
+    const height = Math.round(2 * cMax * ky + m.t + m.b);
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("height", height);
+    const X = (a) => m.l + (a - aMin) * k;
+    const Y = (c) => m.t + (c + cMax) * ky;
+    const lx0 = X(0), lx1 = X(L.len);
+
+    // fasce di penalità e corsia
+    for (const b of BANDS) {
+      for (const sgn of [-1, 1]) {
+        const y0 = Y(sgn * b.from), y1 = Y(sgn * b.to);
+        svg.append(s("rect", { x: lx0, y: Math.min(y0, y1), width: lx1 - lx0, height: Math.abs(y1 - y0),
+          fill: b.fill, "fill-opacity": b.opacity }));
+      }
+    }
+    svg.append(s("rect", { class: "band", x: lx0, y: Y(-300), width: lx1 - lx0, height: Y(300) - Y(-300) }));
+    for (const c of [-600, -450, -300, 300, 450, 600]) {
+      svg.append(s("line", { class: Math.abs(c) === 300 ? "baseline" : "gridline", x1: lx0, x2: lx1, y1: Y(c), y2: Y(c) }));
+    }
+    svg.append(s("line", { class: "mark-line", x1: lx0, x2: lx1, y1: Y(0), y2: Y(0) }));
+    if (ky * 150 > 11) {
+      for (const sgn of [-1, 1]) {
+        for (const b of [{ c: 375, t: "−10%" }, { c: 525, t: "−20%" }, { c: 675, t: "−50%" }]) {
+          if (b.c > cMax) continue;
+          svg.append(s("text", { class: "tick", x: lx0 + 6, y: Y(sgn * b.c) + 4 }, b.t));
+        }
+      }
+    }
+
+    // traiettoria
+    const path = (pts) => pts.map((q, i) => `${i ? "L" : "M"}${X(q.a).toFixed(1)},${Y(q.c).toFixed(1)}`).join("");
+    svg.append(s("path", { d: path(track), fill: "none", stroke: "var(--muted)", "stroke-width": 1.5,
+      "stroke-linejoin": "round" }));
+    svg.append(s("path", { d: path(checked), fill: "none", stroke: "var(--accent)", "stroke-width": 2.5,
+      "stroke-linejoin": "round", "stroke-linecap": "round" }));
+
+    const dot = (q, label, below) => {
+      const cx = X(q.a), cy = Y(q.c);
+      svg.append(s("circle", { cx, cy, r: 4, fill: "var(--ink)", stroke: "var(--surface)", "stroke-width": 2 }));
+      if (!label) return;
+      const right = cx > width - 90;
+      svg.append(s("text", { class: "mark-label", x: right ? cx - 7 : cx + 7, y: below ? cy + 15 : cy - 7,
+        "text-anchor": right ? "end" : "start" }, label));
+    };
+    dot(toLane(j.laneStart), "9 s");
+    dot(toLane(j.win.top), "Top", true);
+    dot(toLane(B), "Bottom", true);
+    dot({ a: L.len, c: 0 }, "Ground ref.");
+    if (L.out > 0) {
+      const cx = X(worst.a), cy = Y(worst.c);
+      svg.append(s("circle", { cx, cy, r: 6, fill: "none", stroke: "var(--error)", "stroke-width": 2 }));
+      svg.append(s("text", { class: "mark-label", x: cx - 10, y: cy - 9, "text-anchor": "end" },
+        `${Math.round(L.out)} m fuori`));
+    }
+
+    const cross = s("circle", { r: 4, fill: "var(--accent)", stroke: "var(--surface)", "stroke-width": 2, visibility: "hidden" });
+    svg.append(cross);
+    state = { X, Y, cross };
+  }
+
+  function show(q) {
+    const { X, Y, cross } = state;
+    const cx = X(q.a), cy = Y(q.c);
+    cross.setAttribute("cx", cx); cross.setAttribute("cy", cy); cross.setAttribute("visibility", "visible");
+    const out = Math.abs(q.c) - 300;
+    tip.replaceChildren(el("div", { class: "tip-head" }, `${q.p.tr.toFixed(1)} s dall'uscita · ${Math.round(q.p.z)} m`),
+      el("div", { class: "tip-row" }, el("b", {}, `${Math.abs(q.c).toFixed(0)} m`),
+        el("span", {}, `dal centro, ${q.c >= 0 ? "a destra" : "a sinistra"}`)),
+      el("div", { class: "tip-row" }, el("b", {}, out > 0 ? `${out.toFixed(0)} m` : "dentro"),
+        el("span", {}, out > 0 ? "fuori corsia" : "la corsia")));
+    tip.hidden = false;
+    const tw = tip.offsetWidth;
+    tip.style.left = `${Math.max(0, cx + 12 + tw > lastWidth ? cx - 12 - tw : cx + 12)}px`;
+    tip.style.top = `${svg.offsetTop + Math.max(0, cy - 40)}px`;
+  }
+  function hide() {
+    if (!state) return;
+    state.cross.setAttribute("visibility", "hidden");
+    tip.hidden = true;
+  }
+  svg.addEventListener("pointermove", (e) => {
+    if (!state) return;
+    const rect = svg.getBoundingClientRect();
+    const sc = lastWidth / rect.width;
+    const px = (e.clientX - rect.left) * sc, py = (e.clientY - rect.top) * sc;
+    let best = null, bd = Infinity;
+    for (const q of track) {
+      const d = Math.hypot(state.X(q.a) - px, state.Y(q.c) - py);
+      if (d < bd) { bd = d; best = q; }
+    }
+    if (best && bd < 40) show(best); else hide();
+  });
+  svg.addEventListener("pointerleave", hide);
+  svg.addEventListener("blur", hide);
+  new ResizeObserver(draw).observe(wrap);
 }
 
 // ------------------------------------------------------------------ vento
@@ -666,6 +880,7 @@ function init() {
   }));
   $("#ground-auto").addEventListener("click", update(() => { current.ground = current.landing; current.groundAuto = true; }));
   $("#lane-on").addEventListener("change", update(() => { settings.laneOn = $("#lane-on").checked; }));
+  $("#repeat").addEventListener("change", update(() => { settings.repeat = $("#repeat").checked; }));
   $("#lane-lat").addEventListener("change", update(() => { const v = readNum("#lane-lat"); if (v != null) settings.laneLat = v; }));
   $("#lane-lon").addEventListener("change", update(() => { const v = readNum("#lane-lon"); if (v != null) settings.laneLon = v; }));
   $("#model").addEventListener("change", update(() => { settings.model = $("#model").value; }));

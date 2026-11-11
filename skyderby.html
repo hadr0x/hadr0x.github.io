@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skyderby → FlySight</title>
+<meta name="description" content="Scarica una traccia Skyderby a frequenza piena e la converte in CSV per FlySight Viewer, direttamente nel browser.">
+<link rel="stylesheet" href="style.css">
+<style>
+  .sky { max-width: 640px; display: flex; flex-direction: column; gap: 16px; }
+  .sky .card { padding: 20px; }
+  .sky-label { display: block; font-weight: 600; margin-bottom: 8px; }
+  .sky-row { display: flex; gap: 8px; }
+  .sky-row input {
+    flex: 1; min-width: 0; font: inherit; padding: 8px 10px; color: var(--ink);
+    background: var(--page); border: 1px solid var(--axis); border-radius: 6px;
+  }
+  .sky-row button { white-space: nowrap; font-weight: 600; color: #fff; background: var(--accent); border-color: var(--accent); }
+  .sky-hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+  .status.ok { color: var(--c6); }
+  #fallback ol { padding-left: 20px; margin: 8px 0 12px; }
+  #fallback a { color: var(--accent); word-break: break-all; }
+  #facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; margin: 4px 0 0; font-size: 14px; }
+  #facts dt { color: var(--ink-2); } #facts dd { margin: 0; font-variant-numeric: tabular-nums; word-break: break-word; }
+</style>
+</head>
+<body>
+<main>
+  <nav class="sitenav" aria-label="Sezioni">
+    <a href="index.html">Analisi Flare</a>
+    <a href="ppc.html">Gare PPC</a>
+    <a href="skyderby.html" aria-current="page">Skyderby → FlySight</a>
+  </nav>
+
+  <header class="top">
+    <h1>Skyderby → FlySight</h1>
+    <p class="lede">Scarica una traccia Skyderby a frequenza piena e la converte in CSV per FlySight Viewer.</p>
+  </header>
+
+  <div class="sky">
+    <section class="card">
+      <label class="sky-label" for="track">Numero traccia</label>
+      <div class="sky-row">
+        <input id="track" type="text" inputmode="numeric" placeholder="es. 166368 oppure il link della traccia" autocomplete="off">
+        <button id="go" type="button">Scarica CSV</button>
+      </div>
+      <p class="sky-hint">Puoi incollare anche il link completo, ad esempio skyderby.io/tracks/166368.</p>
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="card" id="fallback" hidden>
+      <span class="sky-label">Download diretto non riuscito</span>
+      <ol>
+        <li>Apri questo link e salva la pagina (Cmd/Ctrl+S, formato .json):<br><a id="rawlink" href="#" target="_blank" rel="noopener"></a></li>
+        <li>Trascina il file qui sotto: lo converto subito.</li>
+      </ol>
+      <label class="drop" id="drop">
+        <input id="file" type="file" accept=".json,application/json">
+        <span class="drop-title">Trascina qui il file .json</span>
+        <span class="drop-sub">oppure clicca per sceglierlo</span>
+      </label>
+    </section>
+
+    <section class="card" id="summary" hidden>
+      <span class="sky-label">Ultima conversione</span>
+      <dl id="facts"></dl>
+    </section>
+  </div>
+</main>
+
+<script>
+// ---------- conversione (pura, senza DOM) ----------
+const SkyConv = (() => {
+  const R = 6371000;
+
+  // Normalizza i due formati Skyderby:
+  //  - web  /tracks/ID/points.json  -> {points:[{gpsTime, absAltitude, hSpeed (m/s), ...}]}
+  //  - api  /api/v1/tracks/ID/points -> [{gps_time, abs_altitude, h_speed, ...}] (unità rilevate)
+  function normalize(data) {
+    const raw = Array.isArray(data) ? data : (data && data.points);
+    if (!Array.isArray(raw) || raw.length < 10) throw new Error('Il file non contiene punti di una traccia Skyderby.');
+    const get = (p, a, b) => (p[a] !== undefined ? p[a] : p[b]);
+    const pts = raw.map(p => ({
+      time: get(p, 'gpsTime', 'gps_time'),
+      lat: +get(p, 'latitude', 'latitude'),
+      lon: +get(p, 'longitude', 'longitude'),
+      h: +get(p, 'absAltitude', 'abs_altitude'),
+      vh: +get(p, 'hSpeed', 'h_speed'),
+      vz: +get(p, 'vSpeed', 'v_speed'),
+      hAcc: get(p, 'horizontalAccuracy', 'horizontal_accuracy'),
+      vAcc: get(p, 'verticalAccuracy', 'vertical_accuracy'),
+      sAcc: get(p, 'speedAccuracy', 'speed_accuracy'),
+      sep50: get(p, 'sep50', 'sep50'),
+    })).filter(p => p.time && isFinite(p.lat) && isFinite(p.lon) && isFinite(p.h));
+    pts.forEach(p => p.t = Date.parse(p.time) / 1000);
+    pts.sort((a, b) => a.t - b.t);
+    // dedup sul tempo
+    const out = [];
+    for (const p of pts) if (!out.length || p.t > out[out.length - 1].t) out.push(p);
+
+    // Unità e segno della velocità verticale: confronto con la derivata della quota.
+    // Fattore 1 (m/s) o 3.6 (km/h); vSpeed Skyderby è positiva in discesa.
+    const ratios = [];
+    for (let i = 5; i < out.length - 5; i++) {
+      const dz = -(out[i + 5].h - out[i - 5].h) / (out[i + 5].t - out[i - 5].t); // discesa positiva, m/s
+      if (Math.abs(dz) > 8) ratios.push(out[i].vz / dz);
+    }
+    let factor = 1, sign = 1;
+    if (ratios.length > 20) {
+      ratios.sort((a, b) => a - b);
+      const med = ratios[Math.floor(ratios.length / 2)];
+      sign = med < 0 ? -1 : 1;
+      factor = Math.abs(Math.abs(med) - 3.6) < Math.abs(Math.abs(med) - 1) ? 3.6 : 1;
+    }
+    out.forEach(p => { p.vh = p.vh / factor; p.vz = sign * p.vz / factor; });
+    return { pts: out, factor, sign };
+  }
+
+  // Velocità N/E: direzione dalle posizioni (differenza centrata ±1 s), modulo = hSpeed Skyderby.
+  function toFlySight(pts) {
+    const n = pts.length;
+    const lat0 = pts[0].lat * Math.PI / 180, lon0 = pts[0].lon * Math.PI / 180;
+    let latSum = 0; pts.forEach(p => latSum += p.lat); const cosm = Math.cos(latSum / n * Math.PI / 180);
+    const xs = pts.map(p => R * (p.lon * Math.PI / 180 - lon0) * cosm);
+    const ys = pts.map(p => R * (p.lat * Math.PI / 180 - lat0));
+    const dts = []; for (let i = 1; i < n; i++) dts.push(pts[i].t - pts[i - 1].t);
+    dts.sort((a, b) => a - b); const dt = dts[Math.floor(dts.length / 2)] || 0.2;
+    const k = Math.max(1, Math.round(1 / dt));
+
+    const lines = [
+      'time,lat,lon,hMSL,velN,velE,velD,hAcc,vAcc,sAcc,heading,cAcc,gpsFix,numSV',
+      ',(deg),(deg),(m),(m/s),(m/s),(m/s),(m),(m),(m/s),(deg),(deg),,',
+    ];
+    for (let i = 0; i < n; i++) {
+      const a = Math.max(0, i - k), b = Math.min(n - 1, i + k);
+      const dx = xs[b] - xs[a], dy = ys[b] - ys[a];
+      const d = Math.hypot(dx, dy) || 1e-9;
+      const p = pts[i];
+      const vN = p.vh * dy / d, vE = p.vh * dx / d;
+      let head = Math.atan2(vE, vN) * 180 / Math.PI; if (head < 0) head += 360;
+      const s50 = isFinite(+p.sep50) ? +p.sep50 : 5;
+      const hAcc = isFinite(+p.hAcc) && p.hAcc !== null ? +p.hAcc : s50 / 1.54;
+      const vAcc = isFinite(+p.vAcc) && p.vAcc !== null ? +p.vAcc : s50 / 1.54;
+      const sAcc = isFinite(+p.sAcc) && p.sAcc !== null ? +p.sAcc : 0.5;
+      const iso = new Date(Math.round(p.t * 100) * 10).toISOString().replace(/(\.\d\d)\dZ$/, '$1Z');
+      lines.push([iso, p.lat.toFixed(7), p.lon.toFixed(7), p.h.toFixed(3), vN.toFixed(2), vE.toFixed(2),
+        p.vz.toFixed(2), hAcc.toFixed(3), vAcc.toFixed(3), sAcc.toFixed(2), head.toFixed(5), '0.00000', '3', '12'].join(','));
+    }
+    return { csv: lines.join('\n') + '\n', hz: 1 / dt };
+  }
+
+  function convert(data) {
+    const { pts } = normalize(data);
+    const { csv, hz } = toFlySight(pts);
+    let hmax = -Infinity; pts.forEach(p => { if (p.h > hmax) hmax = p.h; });
+    return { csv, hz, count: pts.length, start: pts[0].time, duration: pts[pts.length - 1].t - pts[0].t, hmax };
+  }
+  return { convert };
+})();
+if (typeof module !== 'undefined') module.exports = SkyConv;
+
+// ---------- interfaccia ----------
+if (typeof document !== 'undefined') {
+  const $ = id => document.getElementById(id);
+  const input = $('track'), btn = $('go'), status = $('status');
+  let currentId = null;
+
+  const parseId = v => { const m = String(v).match(/(\d{3,})/); return m ? m[1] : null; };
+  const setStatus = (msg, cls = '') => { status.textContent = msg; status.className = 'status' + (cls ? ' ' + cls : ''); };
+  const rawUrl = id => `https://skyderby.io/tracks/${id}/points.json?original_frequency=true&trimmed=false`;
+  // Endpoint API: unico con CORS aperto. Frequenza piena; margini ampi = traccia praticamente intera.
+  const apiUrl = id => `https://skyderby.io/api/v1/tracks/${id}/points?freq_1_hz=false`
+    + `&trimmed[seconds_before_start]=3600&trimmed[seconds_after_end]=3600`;
+
+  function download(text, name) {
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: name });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  function finish(data, id, source) {
+    const r = SkyConv.convert(data);
+    const name = `skyderby_${id || 'traccia'}_flysight.csv`;
+    download(r.csv, name);
+    const facts = [
+      ['File', name], ['Origine', source], ['Punti', r.count.toLocaleString('it-IT')],
+      ['Frequenza', r.hz.toFixed(1) + ' Hz'], ['Durata', Math.round(r.duration) + ' s'],
+      ['Inizio', String(r.start).replace('T', ' ').replace(/\.\d+Z$/, ' UTC')], ['Quota max', Math.round(r.hmax) + ' m'],
+    ];
+    const dl = $('facts'); dl.textContent = '';
+    for (const [k, v] of facts) {
+      dl.append(Object.assign(document.createElement('dt'), { textContent: k }),
+                Object.assign(document.createElement('dd'), { textContent: v }));
+    }
+    $('summary').hidden = false;
+    setStatus(`Fatto: ${r.count} punti a ${r.hz.toFixed(1)} Hz, file scaricato.`, 'ok');
+  }
+
+  function showFallback(id) {
+    $('rawlink').href = rawUrl(id); $('rawlink').textContent = rawUrl(id);
+    $('fallback').hidden = false;
+  }
+
+  async function run() {
+    const id = parseId(input.value);
+    if (!id) { setStatus('Inserisci il numero della traccia.', 'error'); return; }
+    currentId = id; btn.disabled = true; $('fallback').hidden = true;
+    setStatus(`Scarico la traccia ${id}…`);
+    try {
+      const res = await fetch(apiUrl(id), { headers: { Accept: 'application/json' } });
+      if (res.status === 404) throw new Error(`La traccia ${id} non esiste.`);
+      if (res.status === 403) throw new Error(`La traccia ${id} non è pubblica.`);
+      if (!res.ok) throw new Error(`Skyderby ha risposto ${res.status}.`);
+      finish(await res.json(), id, 'Skyderby API');
+    } catch (e) {
+      const msg = e instanceof TypeError ? 'Il browser ha bloccato il download diretto.' : e.message;
+      setStatus(msg + ' Usa il metodo manuale qui sotto.', 'error');
+      showFallback(id);
+    } finally { btn.disabled = false; }
+  }
+
+  function readFile(f) {
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try { finish(JSON.parse(r.result), currentId || parseId(f.name), 'file caricato'); }
+      catch (e) { setStatus('File non valido: ' + e.message, 'error'); }
+    };
+    r.readAsText(f);
+  }
+
+  btn.addEventListener('click', run);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
+  const drop = $('drop'), file = $('file');
+  file.addEventListener('change', () => { readFile(file.files[0]); file.value = ''; });
+  ['dragover', 'dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => readFile(e.dataTransfer.files[0]));
+  const q = new URLSearchParams(location.search).get('track');
+  if (q) { input.value = q; run(); }
+}
+</script>
+</body>
+</html>

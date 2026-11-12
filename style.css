@@ -183,6 +183,28 @@ tr.marked td { background: var(--band); }
 .tip-row b { font-variant-numeric: tabular-nums; min-width: 3.5em; text-align: right; }
 .tip-row span:last-child { color: var(--ink-2); }
 
+/* --------------------------------------------------------------- flare */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 12px 0 16px; }
+.kpi { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; background: var(--page); border: 1px solid var(--border); border-radius: 8px; }
+.kpi-label { font-size: 12px; color: var(--ink-2); }
+.kpi-value { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.kpi-value small { font-size: 13px; font-weight: 400; color: var(--ink-2); }
+.kpi-sub { font-size: 12px; color: var(--muted); }
+.verdict { margin: 0 0 20px; }
+.advice { margin: 0 0 10px; padding: 10px 14px; border-left: 3px solid var(--accent); background: var(--band); border-radius: 0 8px 8px 0; max-width: 80ch; }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-width: 90ch; font-size: 14px; }
+.checks li { display: flex; gap: 10px; align-items: baseline; color: var(--ink-2); }
+.checks li b { color: var(--ink); }
+.badge { flex: none; width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff; transform: translateY(3px); }
+.ok .badge { background: #1baf7a; }
+.warn .badge { background: #c98500; }
+.bad .badge { background: var(--error); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.flare > .block-head { flex-wrap: wrap; }
+.flare details { margin-top: 16px; font-size: 14px; }
+.flare details summary { color: var(--accent); cursor: pointer; }
+tr.marked td { font-weight: 600; }
+
 /* ----------------------------------------------------------------- help */
 .help { margin-top: 32px; }
 .help dl { margin: 12px 0 0; display: grid; grid-template-columns: max-content 1fr; gap: 8px 20px; max-width: 860px; }

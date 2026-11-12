@@ -6,8 +6,7 @@
 <title>Analisi Flare</title>
 <meta name="description" content="Analisi del flare da file GPS FlySight di tuta alare, direttamente nel browser.">
 <link rel="stylesheet" href="style.css">
-<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js" defer></script>
-<script src="app.js" defer></script>
+<script src="flare.js" defer></script>
 </head>
 <body>
 <main>
@@ -31,12 +30,18 @@
     </label>
 
     <details class="manual">
-      <summary>Intervallo manuale</summary>
-      <p>Normalmente il volo viene trovato da solo (dall'uscita all'apertura). Se non funziona,
-        indica tu dove cercare il flare, in secondi dall'inizio del file.</p>
+      <summary>Intervallo, quota del suolo e tuta</summary>
+      <p>Normalmente il volo viene trovato da solo (dall'uscita all'apertura) e la quota del suolo dai punti
+        dopo l'atterraggio. Se non funziona, indica tu dove cercare i flare, in secondi dall'inizio del file,
+        e la quota del suolo in metri sul livello del mare (Reggio Emilia ≈ 36 m).
+        Massa in volo (tu con l'attrezzatura) e superficie della tuta servono solo alla drag polar:
+        cambiano la scala di CL e CD, non la forma né l'L/D. Se li lasci vuoti uso 80 kg e 2 m².</p>
       <div class="manual-row">
         <label>da <input type="number" id="da" step="1" min="0" inputmode="decimal"> s</label>
         <label>a <input type="number" id="a" step="1" min="0" inputmode="decimal"> s</label>
+        <label>suolo <input type="number" id="ground" step="1" inputmode="decimal"> m</label>
+        <label>massa <input type="number" id="mass" step="1" min="30" placeholder="80" inputmode="decimal"> kg</label>
+        <label>superficie <input type="number" id="area" step="0.1" min="0.5" placeholder="2" inputmode="decimal"> m²</label>
         <button type="button" id="rerun" disabled>Rianalizza</button>
       </div>
     </details>
@@ -49,44 +54,55 @@
   <details class="help">
     <summary>Come leggere i dati</summary>
     <dl>
-      <dt>Velocità</dt>
-      <dd>Tutte in km/h. <b>V orizzontale</b> è quanto vai avanti, <b>V verticale</b> quanto scendi
-        (positiva = discesa, negativa = stai salendo), <b>V totale</b> è la combinazione delle due.</dd>
-      <dt>Inizio flare</dt>
-      <dd>L'ultimo momento in cui scendi alla massima velocità verticale prima del culmine: da lì in poi
-        stai tirando su.</dd>
-      <dt>V verticale minima</dt>
-      <dd>Il punto in cui scendi più piano. Se è negativa, in quel momento stavi salendo.</dd>
-      <dt>Quota persa prima di risalire</dt>
-      <dd>Quanto sei sceso dall'inizio del flare al punto più basso.</dd>
-      <dt>Quota guadagnata / durata della salita</dt>
-      <dd>Quanto sei risalito dal punto più basso al culmine, e in quanto tempo. Se non sei mai salito c'è un trattino.</dd>
-      <dt>Efficienza</dt>
-      <dd>V orizzontale diviso V verticale: quanti metri avanti per ogni metro di discesa.
-        “salita” se stavi salendo, ∞ se eri praticamente in piano.</dd>
-      <dt>G</dt>
-      <dd>Il carico che senti: 1 G è il volo stabile, di più significa che stai tirando.</dd>
-      <dt>Rendimento velocità→quota</dt>
-      <dd>Quanta della velocità persa durante la salita è diventata quota. 100% sarebbe una conversione
-        perfetta senza resistenza dell'aria; valori più alti = flare più pulito.</dd>
-      <dt>Angolo di traiettoria</dt>
-      <dd>La direzione in cui ti muovi rispetto all'orizzonte: negativo in discesa, positivo in salita.
-        La <b>rotazione</b> è quanto velocemente cambia (gradi al secondo): dice quanto è stata progressiva la richiamata.</dd>
-      <dt>Quota equivalente</dt>
-      <dd>La quota più quella che guadagneresti trasformando tutta la velocità in salita (v²/2g): è la tua energia
-        totale espressa in metri. Senza resistenza dell'aria resterebbe costante; dove scende di colpo stai perdendo energia.
-        La <b>quota equivalente persa</b> è quanta ne hai consumata dall'inizio del flare al culmine.</dd>
-      <dt>Polare delle velocità</dt>
-      <dd>V orizzontale contro V verticale, con la discesa verso il basso e la stessa scala sui due assi: la pendenza
-        dall'origine a un punto è proprio la traiettoria. Le rette tratteggiate sono a efficienza costante.</dd>
-      <dt>Profilo laterale</dt>
-      <dd>La traiettoria vista di fianco: distanza orizzontale e quota dall'inizio del flare, in scala reale.</dd>
+      <dt>Dive angle</dt>
+      <dd>L'inclinazione della traiettoria rispetto all'orizzonte, come in FlySight Viewer: positivo in picchiata,
+        0 in orizzontale, negativo in salita. Nei grafici del flare il tempo è contato dal momento in cui diventi
+        orizzontale (0 s).</dd>
+      <dt>Carico (g)</dt>
+      <dd>La pressione sulle ali: 1 g è il volo stabile, di più significa che stai tirando su. Si calcola da quanto
+        velocemente curvi la traiettoria e da quanto vai veloce.</dd>
+      <dt>V orizzontale</dt>
+      <dd>La velocità totale nel momento in cui sei orizzontale. È il carburante della salita e conta al quadrato:
+        10 km/h in più qui valgono parecchi metri.</dd>
+      <dt>Parte ripida</dt>
+      <dd>Il carico massimo finché la picchiata è oltre 25°. Deve restare leggero (sotto 2,1 g): tirare forte qui
+        frena e consuma velocità prima di poterla usare. Sopra 2,6 g è uno strappo.</dd>
+      <dt>Rotazione 45→25</dt>
+      <dd>Quanti gradi al secondo ruoti tra 45° e 25° di picchiata. Paziente = 8 °/s o meno; i flare strappati
+        arrivavano a 15–17 °/s. Da 45° all'orizzontale prenditi almeno 5 secondi.</dd>
+      <dt>Picco di carico</dt>
+      <dd>Il momento di massima pressione. Deve cadere vicino all'orizzonte (entro 12° di picchiata), non prima.</dd>
+      <dt>g +1 s</dt>
+      <dd>Il carico un secondo dopo l'orizzonte. Se scende sotto 1,6 g hai mollato all'orizzonte e la salita resta
+        piatta: continua a ruotare per circa 2 secondi.</dd>
+      <dt>Salita max</dt>
+      <dd>L'angolo di salita più ripido dopo l'orizzonte. Con la CR+ i flare migliori arrivano a 20–25°.</dd>
+      <dt>Guadagno</dt>
+      <dd>Quota dell'apice meno quota del punto più basso.</dd>
+      <dt>Ideale ed efficienza</dt>
+      <dd>Senza aria tutta la velocità persa tra l'orizzontale e l'apice diventerebbe quota: (V orizz.² − V apice²) / 2g.
+        L'efficienza è il guadagno vero diviso questo ideale; il resto se lo prende la resistenza. Nei flare buoni
+        è intorno al 28%; sotto il 22% hai volato troppo in piano.</dd>
+      <dt>V apice</dt>
+      <dd>La velocità in cima alla salita: sotto 100 km/h attenzione, sotto 90 sei vicino allo stallo.</dd>
+      <dt>Drag polar</dt>
+      <dd>Coefficiente di portanza (CL) contro coefficiente di resistenza (CD), dalla V max all'apice. Si ricava
+        dall'accelerazione: la parte opposta alla velocità è la resistenza, quella perpendicolare la portanza.
+        Le rette tratteggiate sono a L/D costante (portanza diviso resistenza): più il punto sta in alto a sinistra,
+        più la tuta stava volando in modo efficiente. Nel flare scorri lungo la polare: da CL basso in picchiata
+        a CL alto quando tiri. <b>L/D massimo</b> è il valore più alto toccato nel flare; <b>CL max</b> è quanta
+        portanza hai chiesto al massimo. La forma e l'L/D non dipendono da massa e superficie; il vento costante
+        non cambia l'accelerazione ma sposta un po' la direzione della velocità, quindi leggila come tendenza.</dd>
+      <dt>Riferimento +59 m</dt>
+      <dd>La linea tratteggiata è il carico del flare record con la CR+ (8/11/2026): leggero e costante finché sei ripido,
+        picco quasi 3 g all'orizzonte, pressione tenuta nei 2 s dopo.</dd>
       <dt>Precisione</dt>
-      <dd>Con file a 1 punto al secondo i valori di picco (V minima, G) sono approssimati.</dd>
+      <dd>Il GPS misura la velocità rispetto al suolo, non all'aria: con vento i numeri cambiano un po'. Con file sotto
+        i 5 Hz carichi e rotazioni sono approssimati. Le soglie sono tarate sulla Squirrel CR+.</dd>
     </dl>
   </details>
 
-  <footer>Analisi fatta con <code>flare.py</code> eseguito nel browser tramite Pyodide.</footer>
+  <footer>Analisi fatta con <code>flare.js</code>, tutta nel browser: i file non vengono caricati da nessuna parte.</footer>
 </main>
 </body>
 </html>

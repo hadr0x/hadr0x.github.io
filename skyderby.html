@@ -17,6 +17,10 @@
   }
   .sky-row button { white-space: nowrap; font-weight: 600; color: #fff; background: var(--accent); border-color: var(--accent); }
   .sky-hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+  .sky-gap { margin-top: 16px; }
+  .sky-hint code { overflow-wrap: anywhere; }
+  #disc { font: inherit; padding: 8px 10px; color: var(--ink); background: var(--page);
+          border: 1px solid var(--axis); border-radius: 6px; max-width: 100%; }
   .status.ok { color: var(--c6); }
   #fallback ol { padding-left: 20px; margin: 8px 0 12px; }
   #fallback a { color: var(--accent); word-break: break-all; }
@@ -45,6 +49,15 @@
         <button id="go" type="button">Scarica CSV</button>
       </div>
       <p class="sky-hint">Puoi incollare anche il link completo, ad esempio skyderby.io/tracks/166368.</p>
+      <label class="sky-label sky-gap" for="disc">Disciplina</label>
+      <select id="disc">
+        <option value="DF">Dive and Flare (DF)</option>
+        <option value="TIME">Time (TIME)</option>
+        <option value="SPEED">Speed (SPEED)</option>
+        <option value="DIST">Distance (DIST)</option>
+      </select>
+      <p class="sky-hint">Il file si chiama <code>traccia_disciplina_tuta_pilota.csv</code>, ad esempio
+        <code id="example">146902_DF_CR+_Alexey_Galda.csv</code>.</p>
       <p class="status" id="status" role="status" aria-live="polite"></p>
     </section>
 
@@ -171,6 +184,31 @@ if (typeof document !== 'undefined') {
   // Endpoint API: unico con CORS aperto. Frequenza piena; margini ampi = traccia praticamente intera.
   const apiUrl = id => `https://skyderby.io/api/v1/tracks/${id}/points?freq_1_hz=false`
     + `&trimmed[seconds_before_start]=3600&trimmed[seconds_after_end]=3600`;
+  const infoUrl = id => `https://skyderby.io/api/v1/tracks/${id}`;
+
+  // Disciplina: ricorda l'ultima scelta.
+  const disc = $('disc');
+  try { const d = localStorage.getItem('skyderby-disc'); if (d && [...disc.options].some(o => o.value === d)) disc.value = d; } catch (e) {}
+  const showExample = () => { $('example').textContent = `146902_${disc.value}_CR+_Alexey_Galda.csv`; };
+  disc.addEventListener('change', () => { showExample(); try { localStorage.setItem('skyderby-disc', disc.value); } catch (e) {} });
+  showExample();
+
+  // Tuta e pilota dai dati della traccia (null se non disponibili).
+  let info = null;
+  async function loadInfo(id) {
+    try {
+      const res = await fetch(infoUrl(id), { headers: { Accept: 'application/json' } });
+      if (!res.ok) return null;
+      const t = await res.json();
+      return {
+        suit: (t.suit && t.suit.name) || t.missingSuitName || '',
+        pilot: (t.pilot && t.pilot.name) || t.name || '',
+      };
+    } catch (e) { return null; }
+  }
+  const clean = s => String(s || '').trim().replace(/[\/\\:*?"<>|]+/g, '-').replace(/\s+/g, '_');
+  const fileName = id => [id || 'traccia', disc.value, info && info.suit, info && info.pilot]
+    .map(clean).filter(Boolean).join('_') + '.csv';
 
   function download(text, name) {
     const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
@@ -181,10 +219,12 @@ if (typeof document !== 'undefined') {
 
   function finish(data, id, source) {
     const r = SkyConv.convert(data);
-    const name = `skyderby_${id || 'traccia'}_flysight.csv`;
+    const name = fileName(id);
     download(r.csv, name);
     const facts = [
-      ['File', name], ['Origine', source], ['Punti', r.count.toLocaleString('it-IT')],
+      ['File', name], ['Origine', source],
+      ...(info ? [['Pilota', info.pilot || '—'], ['Tuta', info.suit || '—']] : []),
+      ['Punti', r.count.toLocaleString('it-IT')],
       ['Frequenza', r.hz.toFixed(1) + ' Hz'], ['Durata', Math.round(r.duration) + ' s'],
       ['Inizio', String(r.start).replace('T', ' ').replace(/\.\d+Z$/, ' UTC')], ['Quota max', Math.round(r.hmax) + ' m'],
     ];
@@ -207,8 +247,11 @@ if (typeof document !== 'undefined') {
     if (!id) { setStatus('Inserisci il numero della traccia.', 'error'); return; }
     currentId = id; btn.disabled = true; $('fallback').hidden = true;
     setStatus(`Scarico la traccia ${id}…`);
+    info = null;
     try {
-      const res = await fetch(apiUrl(id), { headers: { Accept: 'application/json' } });
+      const [res, meta] = await Promise.all([
+        fetch(apiUrl(id), { headers: { Accept: 'application/json' } }), loadInfo(id)]);
+      info = meta;
       if (res.status === 404) throw new Error(`La traccia ${id} non esiste.`);
       if (res.status === 403) throw new Error(`La traccia ${id} non è pubblica.`);
       if (!res.ok) throw new Error(`Skyderby ha risposto ${res.status}.`);
@@ -223,8 +266,10 @@ if (typeof document !== 'undefined') {
   function readFile(f) {
     if (!f) return;
     const r = new FileReader();
-    r.onload = () => {
-      try { finish(JSON.parse(r.result), currentId || parseId(f.name), 'file caricato'); }
+    r.onload = async () => {
+      const id = currentId || parseId(f.name);
+      if (id && !info) info = await loadInfo(id);
+      try { finish(JSON.parse(r.result), id, 'file caricato'); }
       catch (e) { setStatus('File non valido: ' + e.message, 'error'); }
     };
     r.readAsText(f);

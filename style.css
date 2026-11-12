@@ -201,6 +201,8 @@ tr.marked td { background: var(--band); }
 .bad .badge { background: var(--error); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .flare > .block-head { flex-wrap: wrap; }
+.flare-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.flare-pick .seg { flex-wrap: wrap; }
 .flare details { margin-top: 16px; font-size: 14px; }
 .flare details summary { color: var(--accent); cursor: pointer; }
 tr.marked td { font-weight: 600; }

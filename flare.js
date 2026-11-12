@@ -236,13 +236,15 @@ function findFlares(tr, lo, hi) {
   for (let i = lo + 1; i < hi; i++) {
     const vd = tr.vd[i];
     if (!(vd < 5 && vd <= tr.vd[i - 1] && vd <= tr.vd[i + 1] && tr.vt[i] > 25)) continue;
-    const back = idx(tr, tr.t[i] - 4);
-    let maxVd = -Infinity;
-    for (let k = back; k < i; k++) maxVd = Math.max(maxVd, tr.vd[k]);
-    if (maxVd < 15) continue;
-    // orizzontale: primo punto con vd <= 0 nei 2 s prima del minimo, altrimenti il minimo stesso
+    // orizzontale: inizio del tratto in salita che contiene il minimo (la salita può durare parecchi secondi),
+    // altrimenti il minimo stesso
     let lv = i;
-    for (let k = idx(tr, tr.t[i] - 2); k <= i; k++) if (tr.vd[k] <= 0) { lv = k; break; }
+    while (lv > lo && tr.vd[lv - 1] <= 0) lv--;
+    // prima dell'orizzontale ci deve essere una picchiata vera (oltre 54 km/h di velocità verticale)
+    const back = idx(tr, tr.t[lv] - 4);
+    let maxVd = -Infinity;
+    for (let k = back; k < lv; k++) maxVd = Math.max(maxVd, tr.vd[k]);
+    if (maxVd < 15) continue;
     if (tr.t[lv] - last < 5) continue;
     last = tr.t[lv];
     out.push(lv);
@@ -532,17 +534,6 @@ function fileCard(r) {
     `drag polar con ${nf(r.suit.mass)} kg e ${nf(r.suit.area, 1)} m²` +
     (tr.hz < 4 ? " · dati sotto i 5 Hz: carichi e rotazioni sono approssimati" : "")));
 
-  const sl = (arr) => arr.slice(r.lo, r.hi + 1);
-  const t = sl(tr.t);
-  card.append(el("div", { class: "block" },
-    el("p", { class: "chart-title" }, "Il volo · velocità (km/h) · secondi dall'inizio del file · in evidenza i flare"),
-    lineChart({ x: t, unit: "km/h", xUnit: "s", height: 220,
-      series: [
-        { label: "V totale", color: "var(--s1)", values: sl(tr.vt).map((v) => v * KMH) },
-        { label: "V orizzontale", color: "var(--s2)", values: sl(tr.vh).map((v) => v * KMH) },
-        { label: "V verticale", color: "var(--s3)", values: sl(tr.vd).map((v) => v * KMH) }],
-      bands: r.flares.map((f, i) => ({ from: tr.t[f.ipk], to: tr.t[f.top], label: `F${i + 1}` })) })));
-
   if (!r.flares.length) {
     card.append(el("p", { class: "err" }, "Nessun flare trovato. Prova a indicare l'intervallo a mano."));
     return card;
@@ -553,9 +544,21 @@ function fileCard(r) {
     el("div", { class: "block-head" }, el("h3", {}, "Riepilogo"),
       csvButton(`${base}_flare.csv`, SUMMARY_HEADERS, rows)),
     table(SUMMARY_HEADERS, rows, { best: 13 })));
+  // un flare alla volta: si parte da quello con il guadagno migliore
   const list = el("div", { class: "flares" });
-  r.flares.forEach((f, i) => list.append(flareBlock(tr, f, i + 1, r)));
+  const show = (k) => {
+    list.replaceChildren(flareBlock(tr, r.flares[k], k + 1, r));
+    seg.querySelectorAll("button").forEach((b, j) => b.setAttribute("aria-checked", String(j === k)));
+  };
+  const seg = el("div", { class: "seg", role: "radiogroup", "aria-label": "Flare da analizzare" },
+    ...r.flares.map((f, i) => el("button", { type: "button", role: "radio", onclick: () => show(i) },
+      `F${i + 1} · ${signed(f.gain)} m`)));
+  if (r.flares.length > 1) {
+    card.append(el("div", { class: "block flare-pick" },
+      el("span", { class: "field-label" }, "Flare da analizzare"), seg));
+  }
   card.append(list);
+  show(r.flares.reduce((b, f, i) => (f.gain > r.flares[b].gain ? i : b), 0));
   return card;
 }
 

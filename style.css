@@ -201,6 +201,11 @@ tr.marked td { background: var(--band); }
 .bad .badge { background: var(--error); }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .flare > .block-head { flex-wrap: wrap; }
+table.summary th, table.summary td { white-space: normal; text-align: left; vertical-align: top; min-width: 9em; padding: 8px 12px; }
+table.summary tbody th { color: var(--ink-2); font-weight: 400; min-width: 12em; position: sticky; left: 0; background: var(--surface); }
+table.summary thead th:first-child { position: sticky; left: 0; z-index: 1; }
+table.summary td.best { font-weight: 700; }
+table.summary tbody tr + tr th { border-top: 1px solid var(--grid); }
 .flare-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .flare-pick .seg { flex-wrap: wrap; }
 .flare details { margin-top: 16px; font-size: 14px; }

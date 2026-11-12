@@ -283,6 +283,15 @@ function measure(tr, lv, lo, hi, ground, suit) {
   const t45 = crossBack(45), t25 = crossBack(25);
   const pk = argmax(tr.n, ipk, top);
 
+  // picchiata prima del flare: tratto continuo oltre 15° che finisce alla V max
+  let ds = ipk;
+  while (ds > lo && da(ds - 1) > 15) ds--;
+  let angSum = 0;
+  for (let i = ds; i <= ipk; i++) angSum += da(i);
+  const diveDur = tr.t[ipk] - tr.t[ds];
+  // V max "già stabile" se negli ultimi 3 s la velocità è salita di meno di 5 km/h
+  const vRise = (tr.vt[ipk] - at(tr, tr.vt, tr.t[ipk] - 3)) * KMH;
+
   // carico massimo nella parte ripida (oltre 25° di picchiata, da V max in poi)
   let steep = null, steepN = null, steepV = null;
   for (let i = ipk; i <= lv; i++) {
@@ -325,6 +334,10 @@ function measure(tr, lv, lo, hi, ground, suit) {
     vApex: vr * KMH, apexDt: tr.t[top] - tl,
     gain,
     eloss: tr.E[ipk] - tr.E[lv],
+    diveDur: diveDur >= 1 ? diveDur : null,
+    diveAng: diveDur >= 1 ? angSum / (ipk - ds + 1) : null,
+    diveLoss: diveDur >= 1 ? tr.alt[ds] - tr.alt[ipk] : null,
+    vStable: vRise < 5,
     rot1: t45 != null && t25 != null ? 20 / (t25 - t45) : null,
     rot1n: vRot != null ? (20 / (t25 - t45)) * (V_ROT / vRot) : null,
     vRot: vRot != null ? vRot * KMH : null,
@@ -502,6 +515,47 @@ function summaryRow(label, f) {
     nf(f.ideal), nf(f.eff), nf(f.ldMax, 2), nf(f.clMax, 2)];
 }
 
+// riepilogo a righe: una riga per misura, una colonna per flare.
+// best: "max" o "min" mette in grassetto il valore migliore della riga (solo con più flare)
+const SUMMARY = [
+  { label: "Picchiata prima del flare",
+    text: (f) => (f.diveDur == null ? "–" : `${nf(f.diveDur)} s a circa ${nf(Math.round(f.diveAng / 5) * 5)}°, ${nf(Math.round(f.diveLoss / 10) * 10)} m`),
+  },
+  { label: "V max", text: (f) => `${nf(f.vmax)} km/h, ${f.vStable ? "già stabile" : "ancora in aumento"}`,
+    value: (f) => f.vmax, best: "max" },
+  { label: "Rotazione 45°→25°", text: (f) => (f.rot1 == null ? "–" : `${nf(f.rot1, 1)} °/s`), value: (f) => f.rot1, best: "min" },
+  { label: "Da 45° all'orizzontale", text: (f) => (f.t45 == null ? "–" : `${nf(f.t45, 1)} s`), value: (f) => f.t45, best: "max" },
+  { label: "Carico nella parte ripida (riportato a 250 km/h)", text: (f) => nf(f.steepN, 1), value: (f) => f.steepN, best: "min" },
+  { label: "V in orizzontale", text: (f) => `${nf(f.vLevel)} km/h`, value: (f) => f.vLevel, best: "max" },
+  { label: "Picco di carico",
+    text: (f) => `${nf(f.peak, 1)} g ${Math.abs(f.peakAngle) < 1 ? "esattamente all'orizzonte"
+      : f.peakAngle > 0 ? `a ${nf(f.peakAngle)}° di picchiata` : `a ${nf(-f.peakAngle)}° di salita`}` },
+  { label: "Carico 1 s dopo l'orizzontale", text: (f) => (f.n1 == null ? "–" : `${nf(f.n1, 1)} g`), value: (f) => f.n1, best: "max" },
+  { label: "Salita max", text: (f) => `${nf(f.climb)}°`, value: (f) => f.climb, best: "max" },
+  { label: "V apice", text: (f) => `${nf(f.vApex)} km/h` },
+  { label: "Guadagno", text: (f) => `${signed(f.gain)} m`, value: (f) => f.gain, best: "max" },
+  { label: "Efficienza della salita", text: (f) => (f.eff == null ? "–" : `${nf(f.eff)}%`), value: (f) => f.eff, best: "max" },
+  { label: "L/D massimo (drag polar)", text: (f) => nf(f.ldMax, 2), value: (f) => f.ldMax, best: "max" },
+];
+
+function summaryTable(items) {
+  const head = el("tr", {}, el("th", { scope: "col" }, ""), ...items.map((a) => el("th", { scope: "col" }, a.label)));
+  const body = el("tbody");
+  for (const row of SUMMARY) {
+    let bestK = -1;
+    if (row.best && items.length > 1) {
+      const vals = items.map((a) => row.value(a.f));
+      vals.forEach((v, k) => {
+        if (v == null || !Number.isFinite(v)) return;
+        if (bestK < 0 || (row.best === "max" ? v > vals[bestK] : v < vals[bestK])) bestK = k;
+      });
+    }
+    body.append(el("tr", {}, el("th", { scope: "row" }, row.label),
+      ...items.map((a, k) => el("td", k === bestK ? { class: "best" } : {}, row.text(a.f)))));
+  }
+  return el("div", { class: "scroll" }, el("table", { class: "summary" }, el("thead", {}, head), body));
+}
+
 // ---------------------------------------------------------------- render
 
 function render(results) {
@@ -516,8 +570,8 @@ function render(results) {
       el("div", { class: "block-head" },
         el("h2", {}, "Confronto tra i flare"),
         csvButton("confronto_flare.csv", SUMMARY_HEADERS, rows)),
-      el("p", { class: "hint" }, "Velocità in km/h. In evidenza il guadagno migliore."),
-      table(SUMMARY_HEADERS, rows, { best: 13 }),
+      el("p", { class: "hint" }, "In grassetto il valore migliore di ogni riga."),
+      summaryTable(all),
       overlay(all)));
   }
   for (const r of results) root.append(fileCard(r));
@@ -543,7 +597,7 @@ function fileCard(r) {
   card.append(el("div", { class: "block" },
     el("div", { class: "block-head" }, el("h3", {}, "Riepilogo"),
       csvButton(`${base}_flare.csv`, SUMMARY_HEADERS, rows)),
-    table(SUMMARY_HEADERS, rows, { best: 13 })));
+    summaryTable(r.flares.map((f, i) => ({ f, label: `F${i + 1}` })))));
   // un flare alla volta: si parte da quello con il guadagno migliore
   const list = el("div", { class: "flares" });
   const show = (k) => {

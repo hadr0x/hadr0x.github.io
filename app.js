@@ -8,6 +8,9 @@ const SPEEDS = [
   { key: "vd", label: "V verticale", color: "var(--s3)" },
 ];
 
+// colori dei flare nel confronto: ordine fisso, al massimo 8 insieme
+const FLARE_COLORS = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--c4)", "var(--c5)", "var(--c6)", "var(--c7)", "var(--c8)"];
+
 const $ = (sel) => document.querySelector(sel);
 let lastFiles = [];
 
@@ -102,12 +105,86 @@ function render(results) {
       el("p", { class: "hint" }, "Quote in m, velocità in km/h, durata in s."),
       table(COMPARE_HEADERS, compare)));
   }
+  const all = results.flatMap((r) => (r.flares || []).map((f, i) => ({
+    f, label: results.length > 1 ? `${stem(r.name)} · F${i + 1}` : `Flare ${i + 1}`,
+  })));
+  if (all.length > 1) root.append(overlayCard(all));
   for (const r of results) root.append(fileCard(r));
+}
+
+// dall'inizio del flare a 1 s dopo il culmine
+function flareTrace(f, label, color) {
+  const s = f.series;
+  const end = Math.max(...f.marks.map((m) => m.t)) + 1;
+  const idx = s.t.flatMap((t, i) => (t >= 0 && t <= end ? [i] : []));
+  const pick = (k) => idx.map((i) => s[k][i]);
+  return { label, color, t: pick("t"), vh: pick("vh"), vd: pick("vd"), dx: pick("dx"), alt: pick("alt") };
+}
+
+function overlayCard(all) {
+  const chosen = all.map((_, i) => (i < FLARE_COLORS.length ? i : null));  // indice colore o null
+  const charts = el("div", { class: "flare-grid" });
+  const boxes = el("div", { class: "picks" });
+
+  function update() {
+    const used = chosen.filter((c) => c != null).length;
+    boxes.querySelectorAll("input").forEach((cb, i) => { cb.disabled = chosen[i] == null && used >= FLARE_COLORS.length; });
+    const traces = all.flatMap((a, i) => (chosen[i] == null ? [] : [flareTrace(a.f, a.label, FLARE_COLORS[chosen[i]])]));
+    charts.replaceChildren(...overlayCharts(traces));
+  }
+
+  all.forEach((a, i) => {
+    const key = el("i", { class: "key" });
+    const cb = el("input", { type: "checkbox" });
+    cb.checked = chosen[i] != null;
+    const paint = () => { key.style.background = chosen[i] == null ? "var(--axis)" : FLARE_COLORS[chosen[i]]; };
+    paint();
+    cb.addEventListener("change", () => {
+      if (cb.checked) {
+        const free = FLARE_COLORS.findIndex((_, c) => !chosen.includes(c));
+        if (free < 0) { cb.checked = false; return; }
+        chosen[i] = free;
+      } else chosen[i] = null;
+      paint();
+      update();
+    });
+    boxes.append(el("label", { class: "check small" }, cb, key, a.label));
+  });
+  update();
+
+  return el("section", { class: "card" },
+    el("div", { class: "card-head" }, el("h2", {}, "Confronto tra i flare")),
+    el("p", { class: "hint" }, "Dall'inizio di ogni flare a 1 s dopo il culmine. " +
+      `Scegli quali sovrapporre (al massimo ${FLARE_COLORS.length} insieme).`),
+    boxes, charts);
+}
+
+function overlayCharts(traces) {
+  if (!traces.length) return [el("p", { class: "hint" }, "Nessun flare selezionato.")];
+  return [
+    el("div", {},
+      el("p", { class: "chart-title" }, "Polare delle velocità (km/h) · V orizzontale → · discesa ↓"),
+      polarChart(traces.map((t) => ({ ...t, x: t.vh, y: t.vd })), { legend: false })),
+    el("div", {},
+      el("p", { class: "chart-title" }, "Profilo laterale (m) · distanza e quota dall'inizio del flare"),
+      profileChart(traces.map((t) => ({ ...t, x: t.dx, y: t.alt })), { legend: false })),
+  ];
+}
+
+function polarChart(traces, extra = {}) {
+  return xyChart({ ...extra, traces, xName: "V orizz.", yName: "V vert.", xUnit: "km/h", yUnit: "km/h",
+    invertY: true, equal: true, rays: true, origin: true, minH: 220, maxH: 420 });
+}
+
+function profileChart(traces, extra = {}) {
+  return xyChart({ ...extra, traces, xName: "distanza", yName: "quota", xUnit: "m", yUnit: "m",
+    equal: true, signedY: true, minH: 160, maxH: 340 });
 }
 
 const COMPARE_HEADERS = ["file", "flare", "quota inizio", "V tot inizio", "V tot max",
   "V vert min", "quota persa", "quota guadagnata", "durata salita",
-  "V tot culmine", "G max", "rendimento %"];
+  "V tot culmine", "G max", "rendimento %",
+  "angolo inizio", "angolo max", "rotaz. max", "quota eq. persa"];
 
 function fileCard(r) {
   const card = el("section", { class: "card" }, el("div", { class: "card-head" }, el("h2", {}, r.name)));
@@ -162,14 +239,30 @@ function flareBlock(f, n, base) {
         lineChart({ x: s.t, series: SPEEDS.map((sp) => ({ ...sp, values: s[sp.key] })),
           unit: "km/h", xUnit: "s", height: 260, marks })),
       el("div", {},
-        el("p", { class: "chart-title" }, "Quota rispetto all'inizio del flare (m)"),
-        lineChart({ x: s.t, series: [{ key: "alt", label: "Quota", color: "var(--s1)", values: s.alt }],
-          unit: "m", xUnit: "s", height: 180, marks, signed: true })),
+        el("p", { class: "chart-title" }, "Polare delle velocità (km/h) · V orizzontale → · discesa ↓"),
+        polarChart([{ label: "", color: "var(--s1)", x: s.vh, y: s.vd, t: s.t, marks: pointMarks(s.t, marks) }])),
+      el("div", {},
+        el("p", { class: "chart-title" }, "Profilo laterale (m) · distanza e quota dall'inizio del flare"),
+        profileChart([{ label: "", color: "var(--s1)", x: s.dx, y: s.alt, t: s.t, marks: pointMarks(s.t, marks) }])),
+      el("div", { class: "wide" },
+        el("p", { class: "chart-title" }, "Quota e quota equivalente rispetto all'inizio del flare (m)"),
+        lineChart({ x: s.t, series: [
+          { key: "alt", label: "Quota", color: "var(--s1)", values: s.alt },
+          { key: "he", label: "Quota equivalente", color: "var(--c7)", values: s.he }],
+          unit: "m", xUnit: "s", height: 220, marks, signed: true })),
+      el("div", {},
+        el("p", { class: "chart-title" }, "Angolo di traiettoria (°) · positivo = salita"),
+        lineChart({ x: s.t, series: [{ key: "gamma", label: "Angolo", color: "var(--s1)", values: s.gamma }],
+          unit: "°", xUnit: "s", height: 180, marks, signed: true })),
       el("div", {},
         el("p", { class: "chart-title" }, "Carico (G)"),
         lineChart({ x: s.t, series: [{ key: "g", label: "G", color: "var(--s1)", values: s.g }],
           unit: "G", xUnit: "s", height: 180, marks, digits: 2 }))),
     details);
+}
+
+function pointMarks(t, marks) {
+  return marks.map((m) => ({ i: nearest(t, m.t), label: m.label }));
 }
 
 function table(headers, rows, { eventCol = false } = {}) {
@@ -387,6 +480,183 @@ function lineChart(opts) {
     const step = e.shiftKey ? 10 : 1;
     const i = current == null ? 0 : current + (e.key === "ArrowRight" ? step : -step);
     show(Math.min(x.length - 1, Math.max(0, i)));
+  });
+
+  new ResizeObserver(draw).observe(wrap);
+  return wrap;
+}
+
+// grafico x-y (polare, profilo): una o più tracce, scala uguale sui due assi se equal
+function xyChart(opts) {
+  const { traces, xName, yName, xUnit, yUnit, invertY = false, equal = false, rays = false,
+    origin = false, signedY = false, minH = 200, maxH = 400, legend = true } = opts;
+  const wrap = el("div", { class: "chart" });
+  const multi = traces.length > 1;
+  if (multi && legend) {
+    wrap.append(el("div", { class: "legend" }, ...traces.map((tr) =>
+      el("span", {}, el("i", { class: "key", style: `background:${tr.color}` }), tr.label))));
+  }
+  const svg = s("svg", { role: "img", tabindex: "0", "aria-label": `Grafico: ${yName} in funzione di ${xName}` });
+  const tip = el("div", { class: "tip", hidden: "" });
+  wrap.append(svg, tip);
+
+  let lastWidth = 0;
+  let state = null;
+
+  function draw() {
+    const width = Math.round(svg.getBoundingClientRect().width || wrap.clientWidth);
+    if (!width || width === lastWidth) return;
+    lastWidth = width;
+    svg.replaceChildren();
+
+    const m = { l: 44, r: 14, t: 12, b: 40 };
+    const w = width - m.l - m.r;
+    let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
+    for (const tr of traces) {
+      for (const v of tr.x) { if (v < xmin) xmin = v; if (v > xmax) xmax = v; }
+      for (const v of tr.y) { if (v < ymin) ymin = v; if (v > ymax) ymax = v; }
+    }
+    if (origin) { xmin = Math.min(xmin, 0); ymin = Math.min(ymin, 0); ymax = Math.max(ymax, 0); }
+    const px = (xmax - xmin || 1) * 0.05, py = (ymax - ymin || 1) * 0.08;
+    let x0 = origin ? xmin : xmin - px, x1 = xmax + px, y0 = ymin - py, y1 = ymax + py;
+
+    let h;
+    if (equal) {
+      // stessi m per pixel sui due assi: gli angoli nel grafico sono quelli veri
+      let k = w / (x1 - x0);
+      h = (y1 - y0) * k;
+      if (h > maxH - m.t - m.b) {
+        h = maxH - m.t - m.b;
+        k = h / (y1 - y0);
+        const extra = w / k - (x1 - x0);
+        if (origin) x1 += extra; else { x0 -= extra / 2; x1 += extra / 2; }
+      } else if (h < minH - m.t - m.b) {
+        h = minH - m.t - m.b;
+        const extra = h / k - (y1 - y0);
+        y0 -= extra / 2; y1 += extra / 2;
+      }
+    } else {
+      h = maxH - m.t - m.b;
+    }
+    const height = Math.round(h + m.t + m.b);
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    svg.setAttribute("height", height);
+
+    const X = (v) => m.l + ((v - x0) / (x1 - x0)) * w;
+    const Y = (v) => (invertY ? m.t + ((v - y0) / (y1 - y0)) * h : m.t + (1 - (v - y0) / (y1 - y0)) * h);
+
+    const yt = ticks(y0, y1, Math.max(3, Math.round(h / 45)));
+    for (const v of yt.values) {
+      if (v < y0 || v > y1) continue;
+      const yy = Y(v);
+      svg.append(s("line", { class: v === 0 ? "baseline" : "gridline", x1: m.l, x2: m.l + w, y1: yy, y2: yy }));
+      svg.append(s("text", { class: "tick", x: m.l - 6, y: yy + 4, "text-anchor": "end" },
+        (signedY && v > 0 ? "+" : "") + fmt(v, yt.step < 1 ? 1 : 0)));
+    }
+    const xt = ticks(x0, x1, Math.max(2, Math.round(w / 80)));
+    for (const v of xt.values) {
+      if (v < x0 || v > x1) continue;
+      const xx = X(v);
+      svg.append(s("line", { class: v === 0 ? "baseline" : "gridline", x1: xx, x2: xx, y1: m.t, y2: m.t + h }));
+      svg.append(s("text", { class: "tick", x: xx, y: m.t + h + 16, "text-anchor": "middle" }, fmt(v, xt.step < 1 ? 1 : 0)));
+    }
+
+    // rette a efficienza costante (m avanti per m di discesa)
+    if (rays) {
+      for (const e of [0.5, 1, 2, 3, 5]) {
+        let ex = x1, ey = x1 / e;
+        if (ey > y1) { ey = y1; ex = y1 * e; }
+        if (ex <= 0 || ey <= 0) continue;
+        svg.append(s("line", { class: "ray", x1: X(0), y1: Y(0), x2: X(ex), y2: Y(ey) }));
+        const bottom = ey >= y1 - 1e-9;  // la retta finisce sul bordo inferiore
+        svg.append(s("text", { class: "ray-label", x: X(ex) + (bottom ? 4 : -4), y: Y(ey) - 4,
+          "text-anchor": bottom ? "start" : "end" }, `eff. ${e}`.replace(".", ",")));
+      }
+    }
+
+    const pts = [];
+    traces.forEach((tr, k) => {
+      let d = "";
+      tr.x.forEach((v, i) => {
+        const sx = X(v), sy = Y(tr.y[i]);
+        d += `${i ? "L" : "M"}${sx.toFixed(1)},${sy.toFixed(1)}`;
+        pts.push({ k, i, sx, sy });
+      });
+      svg.append(s("path", { d, fill: "none", stroke: tr.color, "stroke-width": 2,
+        "stroke-linejoin": "round", "stroke-linecap": "round" }));
+      // pallino sull'inizio del flare per ogni traccia del confronto
+      if (multi) svg.append(s("circle", { cx: X(tr.x[0]), cy: Y(tr.y[0]), r: 3, fill: tr.color }));
+    });
+
+    // eventi: pallino + etichetta, spostata in su o in giù se si sovrappone a un'altra
+    const placed = [];
+    for (const tr of traces) {
+      for (const mk of tr.marks || []) {
+        const cx = X(tr.x[mk.i]), cy = Y(tr.y[mk.i]);
+        svg.append(s("circle", { cx, cy, r: 4, fill: tr.color, stroke: "var(--surface)", "stroke-width": 2 }));
+        const right = cx < m.l + w - 110;
+        const lw = mk.label.length * 6.2;
+        const bx = right ? cx + 8 : cx - 8 - lw;
+        const dy = [0, -14, 14, -28, 28, -42, 42].find((d) => !placed.some((p) =>
+          bx < p.x + p.w && p.x < bx + lw && Math.abs(cy + d - p.y) < 13)) ?? 0;
+        placed.push({ x: bx, y: cy + dy, w: lw });
+        svg.append(s("text", { class: "mark-label", x: cx + (right ? 8 : -8), y: cy + dy + 4,
+          "text-anchor": right ? "start" : "end" }, mk.label));
+      }
+    }
+
+    svg.append(s("text", { class: "tick", x: m.l + w, y: m.t + h + 32, "text-anchor": "end" }, `${xName} (${xUnit})`));
+    svg.append(s("text", { class: "tick", x: m.l + 6, y: m.t + 12 }, `${yName} (${yUnit})`));
+
+    const dot = s("circle", { r: 4, stroke: "var(--surface)", "stroke-width": 2, visibility: "hidden" });
+    svg.append(dot);
+    state = { pts, dot };
+  }
+
+  let current = null;
+  function show(p) {
+    const tr = traces[p.k];
+    state.dot.setAttribute("cx", p.sx); state.dot.setAttribute("cy", p.sy);
+    state.dot.setAttribute("fill", tr.color); state.dot.setAttribute("visibility", "visible");
+    const yv = tr.y[p.i];
+    tip.replaceChildren(
+      el("div", { class: "tip-head" }, `${tr.label ? tr.label + " · " : ""}${fmt(tr.t[p.i], 1)} s`),
+      el("div", { class: "tip-row" }, el("b", {}, `${fmt(tr.x[p.i], 0)} ${xUnit}`), el("span", {}, xName)),
+      el("div", { class: "tip-row" }, el("b", {}, `${signedY && yv > 0 ? "+" : ""}${fmt(yv, 0)} ${yUnit}`), el("span", {}, yName)));
+    tip.hidden = false;
+    const tw = tip.offsetWidth;
+    tip.style.left = `${Math.max(0, p.sx + 12 + tw > lastWidth ? p.sx - 12 - tw : p.sx + 12)}px`;
+    tip.style.top = `${svg.offsetTop + Math.max(0, p.sy - 30)}px`;
+    current = p;
+  }
+  function hide() {
+    if (!state) return;
+    state.dot.setAttribute("visibility", "hidden");
+    tip.hidden = true;
+  }
+
+  svg.addEventListener("pointermove", (e) => {
+    if (!state) return;
+    const rect = svg.getBoundingClientRect();
+    const sc = lastWidth / rect.width;
+    const qx = (e.clientX - rect.left) * sc, qy = (e.clientY - rect.top) * sc;
+    let best = null, bd = 30 * 30;
+    for (const p of state.pts) {
+      const d = (p.sx - qx) ** 2 + (p.sy - qy) ** 2;
+      if (d < bd) { bd = d; best = p; }
+    }
+    if (best) show(best); else hide();
+  });
+  svg.addEventListener("pointerleave", hide);
+  svg.addEventListener("blur", hide);
+  svg.addEventListener("keydown", (e) => {
+    if (!state || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+    e.preventDefault();
+    const k = current ? current.k : 0;
+    const list = state.pts.filter((p) => p.k === k);
+    const step = (e.shiftKey ? 10 : 1) * (e.key === "ArrowRight" ? 1 : -1);
+    const i = current ? Math.min(list.length - 1, Math.max(0, current.i + step)) : 0;
+    show(list[i]);
   });
 
   new ResizeObserver(draw).observe(wrap);

@@ -151,6 +151,12 @@ class Track:
         an, ae, ad = (derivative(v, self.t) for v in (vn, ve, self.vd))
         self.g = [math.sqrt(a * a + b * b + (c - G) ** 2) / G for a, b, c in zip(an, ae, ad)]
 
+        # angolo di traiettoria (positivo = salita) e velocità con cui cambia
+        self.gamma = [math.degrees(math.atan2(-d, h)) for h, d in zip(self.vh, self.vd)]
+        self.rot = smooth(derivative(self.gamma, self.t), n)
+        # quota equivalente: quota + quota che si guadagnerebbe convertendo tutta la velocità
+        self.he = [a + v * v / (2 * G) for a, v in zip(self.alt, self.vt)]
+
         # distanza orizzontale progressiva
         self.dist = [0.0]
         for i in range(1, len(self.t)):
@@ -238,6 +244,9 @@ def measure(tr, peak, lo, hi):
         "efficiency": gain / kinetic * 100 if climbed and kinetic > 1 else None,
         "vt_max": tr.vt[vt_max_i],
         "g_max": max(tr.g[start:top + 1]),
+        "gamma_max": max(tr.gamma[start:top + 1]),
+        "rot_max": max(tr.rot[start:top + 1]),
+        "e_lost": tr.he[start] - tr.he[top],
         "dist": tr.dist[top] - tr.dist[start],
     }
 
@@ -246,6 +255,11 @@ def measure(tr, peak, lo, hi):
 
 def kmh(v):
     return f"{v * KMH:.0f}"
+
+
+def deg(v):
+    v = round(v)
+    return f"{v:+d}" if v else "0"
 
 
 def glide(vh, vd):
@@ -268,6 +282,7 @@ def summary_rows(tr, flares, exit_i):
         row("V orizzontale a inizio flare (km/h)", lambda f: kmh(tr.vh[f["start"]])),
         row("V verticale a inizio flare (km/h)", lambda f: kmh(tr.vd[f["start"]])),
         row("Efficienza a inizio flare", lambda f: glide(tr.vh[f["start"]], tr.vd[f["start"]])),
+        row("Angolo di traiettoria a inizio flare (°)", lambda f: deg(tr.gamma[f["start"]])),
         row("V totale massima (km/h)", lambda f: kmh(f["vt_max"])),
         row("V verticale minima (km/h)", lambda f: kmh(tr.vd[f["peak"]])),
         row("Tempo fino alla V vert. minima (s)",
@@ -282,6 +297,9 @@ def summary_rows(tr, flares, exit_i):
             lambda f: kmh(tr.vt[f["start"]] - tr.vt[f["top"]])),
         row("Distanza orizzontale nel flare (m)", lambda f: f"{f['dist']:.0f}"),
         row("G massimi", lambda f: f"{f['g_max']:.2f}"),
+        row("Angolo di traiettoria massimo (°)", lambda f: deg(f["gamma_max"])),
+        row("Rotazione massima (°/s)", lambda f: f"{f['rot_max']:.0f}"),
+        row("Quota equivalente persa (m)", lambda f: f"{f['e_lost']:.0f}"),
         row("Rendimento velocità→quota (%)",
             lambda f: f"{f['efficiency']:.0f}" if f["efficiency"] is not None else "-"),
     ]
@@ -311,7 +329,7 @@ def detail_rows(tr, f):
             f"{tr.t[i] - t_start:+.1f}",
             f"{tr.alt[i] - tr.alt[f['start']]:+.0f}",
             kmh(tr.vh[i]), kmh(tr.vd[i]), kmh(tr.vt[i]),
-            glide(tr.vh[i], tr.vd[i]), f"{tr.g[i]:.2f}", marks.get(i, ""),
+            glide(tr.vh[i], tr.vd[i]), deg(tr.gamma[i]), f"{tr.g[i]:.2f}", marks.get(i, ""),
         ])
     return rows
 
@@ -338,12 +356,13 @@ def write_csv(path, headers, rows):
         w.writerows(rows)
 
 
-DETAIL_HEADERS = ["t (s)", "quota (m)", "V orizz", "V vert", "V tot", "effic.", "G", ""]
+DETAIL_HEADERS = ["t (s)", "quota (m)", "V orizz", "V vert", "V tot", "effic.", "angolo", "G", ""]
 
 
 COMPARE_HEADERS = ["file", "flare", "quota inizio", "V tot inizio", "V tot max",
                    "V vert min", "quota persa", "quota guadagnata", "durata salita",
-                   "V tot culmine", "G max", "rendimento %"]
+                   "V tot culmine", "G max", "rendimento %",
+                   "angolo inizio", "angolo max", "rotaz. max", "quota eq. persa"]
 
 
 def collect_files(paths):
@@ -390,12 +409,16 @@ def compare_rows(name, tr, flares):
         f"{tr.t[f['top']] - tr.t[f['bottom']]:.1f}" if f["climbed"] else "-",
         kmh(tr.vt[f["top"]]), f"{f['g_max']:.2f}",
         f"{f['efficiency']:.0f}" if f["efficiency"] is not None else "-",
+        deg(tr.gamma[f["start"]]), deg(f["gamma_max"]), f"{f['rot_max']:.0f}", f"{f['e_lost']:.0f}",
     ] for n, f in enumerate(flares, 1)]
 
 
-def series(tr, a, b, origin=0.0, alt0=None):
-    """Valori grezzi (km/h, m) tra gli indici a e b, per i grafici della pagina web."""
+def series(tr, a, b, origin=0.0, alt0=None, ref=None):
+    """Valori grezzi (km/h, m) tra gli indici a e b, per i grafici della pagina web.
+
+    Distanza orizzontale e quota equivalente sono rispetto all'indice ref (di default a)."""
     r = range(a, b + 1)
+    ref = a if ref is None else ref
     return {
         "t": [round(tr.t[i] - origin, 2) for i in r],
         "alt": [round(tr.alt[i] - (alt0 or 0.0), 1) for i in r],
@@ -403,6 +426,10 @@ def series(tr, a, b, origin=0.0, alt0=None):
         "vd": [round(tr.vd[i] * KMH, 1) for i in r],
         "vt": [round(tr.vt[i] * KMH, 1) for i in r],
         "g": [round(tr.g[i], 2) for i in r],
+        "gamma": [round(tr.gamma[i], 1) for i in r],
+        "rot": [round(tr.rot[i], 1) for i in r],
+        "dx": [round(tr.dist[i] - tr.dist[ref], 1) for i in r],
+        "he": [round(tr.he[i] - tr.he[ref], 1) for i in r],
     }
 
 
@@ -436,7 +463,7 @@ def analyze_text(name, text, da=None, a=None):
             marks += [("punto più basso", f["bottom"]), ("culmine", f["top"])]
         out["flares"].append({
             "detail": {"headers": DETAIL_HEADERS[:-1] + ["evento"], "rows": detail_rows(tr, f)},
-            "series": series(tr, a_i, b_i, origin=t_start, alt0=tr.alt[f["start"]]),
+            "series": series(tr, a_i, b_i, origin=t_start, alt0=tr.alt[f["start"]], ref=f["start"]),
             "marks": [{"label": lbl, "t": round(tr.t[i] - t_start, 2)} for lbl, i in marks],
             "span": [round(tr.t[f["start"]] - t_exit, 2), round(tr.t[f["top"]] - t_exit, 2)],
         })

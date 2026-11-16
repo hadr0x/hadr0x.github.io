@@ -19,7 +19,7 @@
   .sky-hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
   .sky-gap { margin-top: 16px; }
   .sky-hint code { overflow-wrap: anywhere; }
-  #disc { font: inherit; padding: 8px 10px; color: var(--ink); background: var(--page);
+  #disc, #kind { font: inherit; padding: 8px 10px; color: var(--ink); background: var(--page);
           border: 1px solid var(--axis); border-radius: 6px; max-width: 100%; }
   .status.ok { color: var(--c6); }
   #fallback ol { padding-left: 20px; margin: 8px 0 12px; }
@@ -49,15 +49,22 @@
         <button id="go" type="button">Scarica CSV</button>
       </div>
       <p class="sky-hint">Puoi incollare anche il link completo, ad esempio skyderby.io/tracks/166368.</p>
-      <label class="sky-label sky-gap" for="disc">Disciplina</label>
-      <select id="disc">
-        <option value="DF">Dive and Flare (DF)</option>
-        <option value="TIME">Time (TIME)</option>
-        <option value="SPEED">Speed (SPEED)</option>
-        <option value="DIST">Distance (DIST)</option>
+      <label class="sky-label sky-gap" for="kind">Tipo di salto</label>
+      <select id="kind">
+        <option value="auto">Automatico (da Skyderby)</option>
+        <option value="skydive">Skydive</option>
+        <option value="base">BASE</option>
       </select>
-      <p class="sky-hint">Il file si chiama <code>traccia_disciplina_tuta_pilota.csv</code>, ad esempio
-        <code id="example">146902_DF_CR+_Alexey_Galda.csv</code>.</p>
+      <div id="disc-wrap">
+        <label class="sky-label sky-gap" for="disc">Disciplina (skydive)</label>
+        <select id="disc">
+          <option value="DF">Dive and Flare (DF)</option>
+          <option value="TIME">Time (TIME)</option>
+          <option value="SPEED">Speed (SPEED)</option>
+          <option value="DIST">Distance (DIST)</option>
+        </select>
+      </div>
+      <p class="sky-hint" id="pattern"></p>
       <p class="status" id="status" role="status" aria-live="polite"></p>
     </section>
 
@@ -186,14 +193,24 @@ if (typeof document !== 'undefined') {
     + `&trimmed[seconds_before_start]=3600&trimmed[seconds_after_end]=3600`;
   const infoUrl = id => `https://skyderby.io/api/v1/tracks/${id}`;
 
-  // Disciplina: ricorda l'ultima scelta.
-  const disc = $('disc');
-  try { const d = localStorage.getItem('skyderby-disc'); if (d && [...disc.options].some(o => o.value === d)) disc.value = d; } catch (e) {}
-  const showExample = () => { $('example').textContent = `146902_${disc.value}_CR+_Alexey_Galda.csv`; };
-  disc.addEventListener('change', () => { showExample(); try { localStorage.setItem('skyderby-disc', disc.value); } catch (e) {} });
-  showExample();
+  // Tipo di salto e disciplina: ricorda l'ultima scelta.
+  const disc = $('disc'), kind = $('kind');
+  const remember = (sel, key) => {
+    try { const v = localStorage.getItem(key); if (v && [...sel.options].some(o => o.value === v)) sel.value = v; } catch (e) {}
+    sel.addEventListener('change', () => { showPattern(); try { localStorage.setItem(key, sel.value); } catch (e) {} });
+  };
+  function showPattern() {
+    const k = kind.value;
+    $('disc-wrap').hidden = k === 'base';
+    const sky = `skydive: <code>traccia_disciplina_tuta_pilota.csv</code>, es. <code>146902_${disc.value}_CR+_Alexey_Galda.csv</code>`;
+    const base = 'BASE: <code>traccia_exit_tuta_pilota.csv</code>, es. <code>167447_Low_Ultimate_Power_tracking_suit_Vincent_Bravo.csv</code>';
+    $('pattern').innerHTML = 'Nome del file — ' + (k === 'skydive' ? sky : k === 'base' ? base : sky + '<br>' + base)
+      + (k === 'auto' ? '<br>In automatico il tipo lo leggo dalla traccia su Skyderby.' : '');
+  }
+  remember(kind, 'skyderby-kind'); remember(disc, 'skyderby-disc');
+  showPattern();
 
-  // Tuta e pilota dai dati della traccia (null se non disponibili).
+  // Tipo, exit, tuta e pilota dai dati della traccia (null se non disponibili).
   let info = null;
   async function loadInfo(id) {
     try {
@@ -201,14 +218,17 @@ if (typeof document !== 'undefined') {
       if (!res.ok) return null;
       const t = await res.json();
       return {
+        kind: t.kind === 'base' ? 'base' : 'skydive',
+        exit: (t.place && t.place.name) || t.location || '',
         suit: (t.suit && t.suit.name) || t.missingSuitName || '',
         pilot: (t.pilot && t.pilot.name) || t.name || '',
       };
     } catch (e) { return null; }
   }
   const clean = s => String(s || '').trim().replace(/[\/\\:*?"<>|]+/g, '-').replace(/\s+/g, '_');
-  const fileName = id => [id || 'traccia', disc.value, info && info.suit, info && info.pilot]
-    .map(clean).filter(Boolean).join('_') + '.csv';
+  const jumpKind = () => kind.value !== 'auto' ? kind.value : (info && info.kind) || 'skydive';
+  const fileName = id => [id || 'traccia', jumpKind() === 'base' ? (info && info.exit) || 'BASE' : disc.value,
+    info && info.suit, info && info.pilot].map(clean).filter(Boolean).join('_') + '.csv';
 
   function download(text, name) {
     const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
@@ -223,7 +243,9 @@ if (typeof document !== 'undefined') {
     download(r.csv, name);
     const facts = [
       ['File', name], ['Origine', source],
+      ['Tipo', jumpKind() === 'base' ? 'BASE' : 'Skydive'],
       ...(info ? [['Pilota', info.pilot || '—'], ['Tuta', info.suit || '—']] : []),
+      ...(info && jumpKind() === 'base' ? [['Exit', info.exit || '—']] : []),
       ['Punti', r.count.toLocaleString('it-IT')],
       ['Frequenza', r.hz.toFixed(1) + ' Hz'], ['Durata', Math.round(r.duration) + ' s'],
       ['Inizio', String(r.start).replace('T', ' ').replace(/\.\d+Z$/, ' UTC')], ['Quota max', Math.round(r.hmax) + ' m'],

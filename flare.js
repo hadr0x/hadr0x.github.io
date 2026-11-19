@@ -6,23 +6,14 @@
    - angolo di traiettoria γ = atan2(-velD, vel orizzontale), positivo in salita;
      "dive angle" = -γ, positivo in picchiata (come FlySight Viewer);
    - carico n = V·dγ/dt / g + cos γ (pressione sulle ali nel piano verticale);
-   - carico a pari velocità = n · (250 km/h / V)²: quanto sta lavorando l'ala, indipendente dalla velocità
-     (è proporzionale al coefficiente di portanza). Serve per confrontare ingressi a 320 e a 420 km/h;
    - orizzontale = primo istante in cui la velocità verticale passa da discesa a salita;
    - guadagno = quota all'apice − quota del punto più basso;
    - guadagno ideale = (V orizzontale² − V apice²) / 2g, efficienza = guadagno / ideale;
-   - drag polar: accelerazione aerodinamica = dv/dt − g, divisa in resistenza (opposta alla velocità)
-     e portanza (perpendicolare); CL = 2·m·aL / (ρ·V²·S), CD = 2·m·aD / (ρ·V²·S), ρ dall'atmosfera standard. */
+   - L/D: accelerazione aerodinamica = dv/dt − g, divisa in resistenza (opposta alla velocità)
+     e portanza (perpendicolare); L/D = portanza / resistenza. */
 
 const G = 9.80665;
 const KMH = 3.6;
-
-// Massa in volo e superficie della tuta per i coefficienti della drag polar: cambiano la scala di CL e CD,
-// non la forma della polare né il rapporto L/D.
-const SUIT_DEFAULTS = { mass: 80, area: 2 };
-
-// densità dell'aria (kg/m³) nell'atmosfera standard
-const rho = (h) => 1.225 * Math.max(0, 1 - 2.25577e-5 * h) ** 4.2559;
 
 // ======================================================================= lettura
 
@@ -117,7 +108,7 @@ function buildTrack(points) {
   const dist = [0];
   for (let i = 1; i < t.length; i++) dist.push(dist[i - 1] + ((vh[i] + vh[i - 1]) / 2) * (t[i] - t[i - 1]));
 
-  // accelerazioni aerodinamiche per la drag polar: derivate su ~0,8 s per contenere il rumore del GPS
+  // accelerazioni aerodinamiche per l'L/D: derivate su ~0,8 s per contenere il rumore del GPS
   const k = Math.max(1, Math.round(0.4 * hz));
   const aL = [], aD = [];
   for (let i = 0; i < t.length; i++) {
@@ -132,13 +123,7 @@ function buildTrack(points) {
   return { t0, t, hz, alt, vh, vd, vt, gam: gam.map((g) => (g * 180) / Math.PI), n, E, dist, aL, aD };
 }
 
-// CL e CD nel punto i (con massa e superficie della tuta)
-function coeffs(tr, i, suit) {
-  const q = 0.5 * rho(tr.alt[i]) * tr.vt[i] ** 2 * suit.area / suit.mass;
-  return { cl: tr.aL[i] / q, cd: tr.aD[i] / q };
-}
-
-// indici della drag polar di un flare: da V max all'apice, solo dove la resistenza è misurabile
+// punti di un flare su cui misurare l'L/D: da V max all'apice, solo dove la resistenza è misurabile
 function polarRange(tr, f) {
   const out = [];
   for (let i = f.ipk; i <= f.top; i++) if (tr.vt[i] > 20 && tr.aD[i] > 0.3) out.push(i);
@@ -193,9 +178,8 @@ function analyzeTrack(points, opts = {}) {
   }
   const groundAuto = findGround(tr, hi);
   const ground = opts.ground ?? groundAuto ?? 0;
-  const suit = { mass: opts.mass || SUIT_DEFAULTS.mass, area: opts.area || SUIT_DEFAULTS.area };
-  const flares = findFlares(tr, lo, hi).map((lv) => measure(tr, lv, lo, hi, ground, suit)).filter(Boolean);
-  return { tr, lo, hi, ground, groundAuto, suit, flares };
+  const flares = findFlares(tr, lo, hi).map((lv) => measure(tr, lv, lo, hi, ground)).filter(Boolean);
+  return { tr, lo, hi, ground, groundAuto, flares };
 }
 
 function findFlares(tr, lo, hi) {
@@ -221,7 +205,7 @@ function findFlares(tr, lo, hi) {
   return out;
 }
 
-function measure(tr, lv, lo, hi, ground, suit) {
+function measure(tr, lv, lo, hi, ground) {
   const tl = tr.t[lv];
   const ipk = argmax(tr.vt, Math.max(lo, idx(tr, tl - 12)), lv);           // V max prima della richiamata
   const top = argmax(tr.alt, lv, Math.min(hi, idx(tr, tl + 12)));          // apice
@@ -239,16 +223,6 @@ function measure(tr, lv, lo, hi, ground, suit) {
     const f = (da(k) - A) / (da(k) - da(k + 1));
     return tr.t[k] + f * (tr.t[k + 1] - tr.t[k]);
   };
-  // istante in cui l'angolo di salita vale A, cercando in avanti dall'orizzontale
-  const crossFwd = (A) => {
-    for (let k = lv; k < kmc; k++) {
-      if (tr.gam[k] <= A && tr.gam[k + 1] > A) {
-        const f = (A - tr.gam[k]) / (tr.gam[k + 1] - tr.gam[k]);
-        return tr.t[k] + f * (tr.t[k + 1] - tr.t[k]);
-      }
-    }
-    return null;
-  };
   const t45 = crossBack(45), t25 = crossBack(25);
   const pk = argmax(tr.n, ipk, top);
 
@@ -262,11 +236,6 @@ function measure(tr, lv, lo, hi, ground, suit) {
   const vRise = (tr.vt[ipk] - at(tr, tr.vt, tr.t[ipk] - 3)) * KMH;
 
   const loadAt = (sec) => (sec == null ? null : at(tr, tr.n, sec));
-  const byAngle = [
-    ...[50, 40, 30, 20, 10].map((A) => ({ label: `${A}° giù`, value: loadAt(crossBack(A)) })),
-    { label: "orizz.", value: tr.n[lv] },
-    ...[10, 20].map((A) => ({ label: `${A}° su`, value: loadAt(crossFwd(A)) })),
-  ];
 
   const v0 = tr.vt[lv], vr = tr.vt[top];
   const gain = tr.alt[top] - tr.alt[bot];
@@ -294,40 +263,27 @@ function measure(tr, lv, lo, hi, ground, suit) {
     rot2: t25 != null ? 25 / (tl - t25) : null,
     t45: t45 != null ? tl - t45 : null,
     ideal, drag: ideal - gain, eff: ideal > 5 ? (gain / ideal) * 100 : null,
-    byAngle,
-    ...polarStats(tr, { ipk, top }, suit),
-    marks: [
-      { t: tr.t[ipk] - tl, label: "V max" },
-      ...(t45 != null ? [{ t: t45 - tl, label: "45°" }] : []),
-      ...(t25 != null ? [{ t: t25 - tl, label: "25°" }] : []),
-      { t: 0, label: "orizz." },
-      { t: tr.t[pk] - tl, label: "picco g" },
-      { t: tr.t[top] - tl, label: "apice" },
-    ],
+    ldMax: ldMax(tr, { ipk, top }),
   };
   return f;
 }
 
-// L/D massimo e CL massimo lungo il flare
-function polarStats(tr, f, suit) {
-  let ldMax = null, clMax = null, ldAt = null;
-  for (const i of polarRange(tr, f)) {
-    const ld = tr.aL[i] / tr.aD[i];
-    if (ldMax == null || ld > ldMax) { ldMax = ld; ldAt = i; }
-    const { cl } = coeffs(tr, i, suit);
-    if (clMax == null || cl > clMax) clMax = cl;
-  }
-  return { ldMax, ldAtV: ldAt == null ? null : tr.vt[ldAt] * KMH, clMax };
+// L/D massimo lungo il flare
+function ldMax(tr, f) {
+  let best = null;
+  for (const i of polarRange(tr, f)) best = Math.max(best ?? -Infinity, tr.aL[i] / tr.aD[i]);
+  return best;
 }
 
-if (typeof module !== "undefined") module.exports = { parseTrack, analyzeTrack, buildTrack, coeffs, polarRange };
+if (typeof module !== "undefined") module.exports = { parseTrack, analyzeTrack, buildTrack };
 
 // ===================================================================== interfaccia
 
 if (typeof document !== "undefined") {
 
 const $ = (sel) => document.querySelector(sel);
-const FLARE_COLORS = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--c4)", "var(--c5)", "var(--c6)", "var(--c7)", "var(--c8)"];
+// un colore per file nel confronto (ordine fisso, al massimo 8)
+const FILE_COLORS = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--c4)", "var(--c5)", "var(--c6)", "var(--c7)", "var(--c8)"];
 let lastFiles = [];
 
 function setStatus(text, isError = false) {
@@ -345,11 +301,7 @@ async function run(files) {
   if (!files.length) return;
   lastFiles = files;
   $("#rerun").disabled = false;
-  const opts = { da: readNumber("#da"), a: readNumber("#a"), ground: readNumber("#ground"),
-    mass: readNumber("#mass"), area: readNumber("#area") };
-  try {
-    localStorage.setItem("flare-suit", JSON.stringify({ mass: $("#mass").value, area: $("#area").value }));
-  } catch { /* storage non disponibile */ }
+  const opts = { da: readNumber("#da"), a: readNumber("#a"), ground: readNumber("#ground") };
   const results = [];
   for (const [k, file] of files.entries()) {
     setStatus(`Analizzo ${file.name} (${k + 1} di ${files.length})…`);
@@ -378,13 +330,6 @@ function shortName(name) {
   return m ? `${+m[3]}/${+m[2]} ${m[4]}:${m[5]}` : stem(name);
 }
 
-// riquadro di un grafico: titolo, sottotitolo e grafico
-function panel(title, sub, chart, wide = false) {
-  return el("figure", { class: wide ? "panel wide" : "panel" },
-    el("figcaption", {}, el("span", { class: "panel-title" }, title), sub ? el("span", { class: "panel-sub" }, sub) : null),
-    chart);
-}
-
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -398,68 +343,89 @@ function el(tag, attrs = {}, ...children) {
 
 const SUMMARY_HEADERS = ["flare", "quota orizz. (m)", "picchiata (°)", "V max", "V orizz.",
   "rot. 45→25 (°/s)", "45°→orizz. (s)", "picco g", "picco a (° giù)", "g +1 s", "salita max (°)", "V apice",
-  "guadagno (m)", "ideale (m)", "efficienza (%)", "L/D max", "CL max"];
+  "guadagno (m)", "ideale (m)", "efficienza (%)", "L/D max"];
 
 function summaryRow(label, f) {
   return [label, nf(f.altLevel), nf(f.dive), nf(f.vmax), nf(f.vLevel), nf(f.rot1, 1), nf(f.t45, 1),
     nf(f.peak, 2), nf(Math.max(0, f.peakAngle)), nf(f.n1, 2), nf(f.climb), nf(f.vApex), signed(f.gain, 1),
-    nf(f.ideal), nf(f.eff), nf(f.ldMax, 2), nf(f.clMax, 2)];
+    nf(f.ideal), nf(f.eff), nf(f.ldMax, 2)];
 }
 
-// riepilogo a righe: una riga per misura, una colonna per flare.
-// best: "max" o "min" mette in grassetto il valore migliore della riga (solo con più flare)
-const SUMMARY = [
-  { label: "Picchiata prima del flare",
-    text: (f) => (f.diveDur == null ? "–" : `${nf(f.diveDur)} s a circa ${nf(Math.round(f.diveAng / 5) * 5)}°, ${nf(Math.round(f.diveLoss / 10) * 10)} m`),
-  },
-  { label: "V max", text: (f) => `${nf(f.vmax)} km/h, ${f.vStable ? "già stabile" : "ancora in aumento"}`,
-    value: (f) => f.vmax, best: "max" },
-  { label: "Rotazione 45°→25°", text: (f) => (f.rot1 == null ? "–" : `${nf(f.rot1, 1)} °/s`), value: (f) => f.rot1, best: "min" },
-  { label: "Da 45° all'orizzontale", text: (f) => (f.t45 == null ? "–" : `${nf(f.t45, 1)} s`), value: (f) => f.t45, best: "max" },
-  { label: "V in orizzontale", text: (f) => `${nf(f.vLevel)} km/h`, value: (f) => f.vLevel, best: "max" },
-  { label: "Picco di carico",
-    text: (f) => `${nf(f.peak, 1)} g ${Math.abs(f.peakAngle) < 1 ? "esattamente all'orizzonte"
-      : f.peakAngle > 0 ? `a ${nf(f.peakAngle)}° di picchiata` : `a ${nf(-f.peakAngle)}° di salita`}` },
-  { label: "Carico 1 s dopo l'orizzontale", text: (f) => (f.n1 == null ? "–" : `${nf(f.n1, 1)} g`), value: (f) => f.n1, best: "max" },
-  { label: "Salita max", text: (f) => `${nf(f.climb)}°`, value: (f) => f.climb, best: "max" },
-  { label: "V apice", text: (f) => `${nf(f.vApex)} km/h` },
-  { label: "Guadagno", text: (f) => `${signed(f.gain)} m`, value: (f) => f.gain, best: "max" },
-  { label: "Efficienza della salita", text: (f) => (f.eff == null ? "–" : `${nf(f.eff)}%`), value: (f) => f.eff, best: "max" },
-  { label: "L/D massimo (drag polar)", text: (f) => nf(f.ldMax, 2), value: (f) => f.ldMax, best: "max" },
+// riepilogo: le misure divise per fase, una colonna per flare.
+// best: "max" o "min" dice in che verso il valore è migliore (per i colori e il grassetto)
+const PHASES = [
+  { name: "Picchiata", cls: "ph-dive", rows: [
+    { label: "Picchiata prima del flare",
+      text: (f) => (f.diveDur == null ? "–" : `${nf(f.diveDur)} s a circa ${nf(Math.round(f.diveAng / 5) * 5)}°, ${nf(Math.round(f.diveLoss / 10) * 10)} m`) },
+    { label: "V max", text: (f) => `${nf(f.vmax)} km/h, ${f.vStable ? "già stabile" : "ancora in aumento"}`,
+      value: (f) => f.vmax, best: "max" },
+  ] },
+  { name: "Richiamata", cls: "ph-pull", rows: [
+    { label: "Rotazione 45°→25°", text: (f) => (f.rot1 == null ? "–" : `${nf(f.rot1, 1)} °/s`), value: (f) => f.rot1, best: "min" },
+    { label: "Da 45° all'orizzontale", text: (f) => (f.t45 == null ? "–" : `${nf(f.t45, 1)} s`), value: (f) => f.t45, best: "max" },
+    { label: "V in orizzontale", text: (f) => `${nf(f.vLevel)} km/h`, value: (f) => f.vLevel, best: "max" },
+    { label: "Picco di carico",
+      text: (f) => `${nf(f.peak, 1)} g ${Math.abs(f.peakAngle) < 1 ? "esattamente all'orizzonte"
+        : f.peakAngle > 0 ? `a ${nf(f.peakAngle)}° di picchiata` : `a ${nf(-f.peakAngle)}° di salita`}` },
+  ] },
+  { name: "Salita", cls: "ph-climb", rows: [
+    { label: "Carico 1 s dopo l'orizzontale", text: (f) => (f.n1 == null ? "–" : `${nf(f.n1, 1)} g`), value: (f) => f.n1, best: "max" },
+    { label: "Salita max", text: (f) => `${nf(f.climb)}°`, value: (f) => f.climb, best: "max" },
+    { label: "V apice", text: (f) => `${nf(f.vApex)} km/h` },
+    { label: "Guadagno", text: (f) => `${signed(f.gain)} m`, value: (f) => f.gain, best: "max", key: true },
+    { label: "Efficienza della salita", text: (f) => (f.eff == null ? "–" : `${nf(f.eff)}%`), value: (f) => f.eff, best: "max" },
+    { label: "L/D massimo", text: (f) => nf(f.ldMax, 2), value: (f) => f.ldMax, best: "max" },
+  ] },
 ];
 
-function summaryTable(items, { onPick = null } = {}) {
-  const head = el("tr", {}, el("th", { scope: "col" }, ""), ...items.map((a, k) => {
-    const content = [el("i", { class: "dot", hidden: "" }), el("span", { class: "col-name" }, a.name ?? a.label),
-      a.sub ? el("span", { class: "col-sub" }, a.sub) : null];
-    return el("th", { scope: "col", "data-col": k },
-      onPick ? el("button", { type: "button", class: "col-pick", onclick: () => onPick(k) }, ...content) : el("span", { class: "col-head" }, ...content));
-  }));
-  const body = el("tbody");
-  for (const row of SUMMARY) {
-    let bestK = -1;
-    if (row.best && items.length > 1) {
-      const vals = items.map((a) => row.value(a.f));
-      vals.forEach((v, k) => {
-        if (v == null || !Number.isFinite(v)) return;
-        if (bestK < 0 || (row.best === "max" ? v > vals[bestK] : v < vals[bestK])) bestK = k;
-      });
-    }
-    body.append(el("tr", {}, el("th", { scope: "row" }, row.label),
-      ...items.map((a, k) => el("td", { "data-col": k, ...(k === bestK ? { class: "best" } : {}) }, row.text(a.f)))));
+// posizione di v tra il peggiore (0) e il migliore (1) della riga
+function scores(vals, best) {
+  const ok = vals.filter((v) => v != null && Number.isFinite(v));
+  if (ok.length < 2) return vals.map(() => null);
+  const lo = Math.min(...ok), hi = Math.max(...ok);
+  if (hi - lo < 1e-9) return vals.map(() => null);
+  return vals.map((v) => (v == null || !Number.isFinite(v) ? null : best === "max" ? (v - lo) / (hi - lo) : (hi - v) / (hi - lo)));
+}
+
+// sfondo della cella: verde verso il migliore, arancio verso il peggiore, neutro a metà
+function tint(score) {
+  if (score == null) return null;
+  const d = score - 0.5;
+  if (Math.abs(d) < 0.08) return null;
+  const pct = Math.round(Math.abs(d) * 2 * 30);
+  return `color-mix(in srgb, var(${d > 0 ? "--good" : "--bad"}) ${pct}%, transparent)`;
+}
+
+function summaryTable(items) {
+  const n = items.length;
+  const head = el("tr", {}, el("th", { scope: "col", class: "corner" }, ""), ...items.map((a) => el("th", { scope: "col" },
+    el("span", { class: "col-head" },
+      a.color ? el("i", { class: "dot", style: `background:${a.color}` }) : null,
+      el("span", { class: "col-name" }, a.name),
+      a.sub ? el("span", { class: "col-sub" }, a.sub) : null))));
+  if (items.some((a) => a.color)) {
+    head.querySelectorAll("th[scope=col]:not(.corner)").forEach((th, k) => th.style.setProperty("--col", items[k].color));
   }
-  const tbl = el("table", { class: "summary" }, el("thead", {}, head), body);
-  const wrap = el("div", { class: "scroll" }, tbl);
-  // evidenzia la colonna k (flare scelto)
-  wrap.select = (k) => tbl.querySelectorAll("[data-col]").forEach((c) => c.classList.toggle("sel", Number(c.dataset.col) === k));
-  // pallino col colore del flare nei grafici del confronto (null = non sovrapposto)
-  wrap.paint = (k, color) => {
-    const d = tbl.querySelector(`thead [data-col="${k}"] .dot`);
-    if (!d) return;
-    d.hidden = !color;
-    if (color) d.style.background = color;
-  };
-  return wrap;
+  const body = el("tbody");
+  for (const ph of PHASES) {
+    body.append(el("tr", { class: `phase ${ph.cls}` }, el("th", { scope: "rowgroup", colspan: n + 1 }, ph.name)));
+    for (const row of ph.rows) {
+      const sc = row.best && n > 1 ? scores(items.map((a) => row.value(a.f)), row.best) : items.map(() => null);
+      body.append(el("tr", { class: `${ph.cls}${row.key ? " key-row" : ""}` }, el("th", { scope: "row" }, row.label),
+        ...items.map((a, k) => {
+          const bg = tint(sc[k]);
+          return el("td", { class: sc[k] === 1 ? "best" : "", ...(bg ? { style: `background:${bg}` } : {}) }, row.text(a.f));
+        })));
+    }
+  }
+  return el("div", { class: "scroll" }, el("table", { class: "summary" }, el("thead", {}, head), body));
+}
+
+function legend() {
+  return el("p", { class: "legend summary-legend" },
+    el("span", {}, el("i", { class: "swatch good" }), "migliore della riga"),
+    el("span", {}, el("i", { class: "swatch bad" }), "peggiore della riga"),
+    el("span", { class: "muted" }, "in grassetto il migliore"));
 }
 
 // ---------------------------------------------------------------- render
@@ -467,23 +433,21 @@ function summaryTable(items, { onPick = null } = {}) {
 function render(results) {
   const root = $("#results");
   root.replaceChildren();
-  const multi = results.length > 1;
-  const all = results.flatMap((r) => (r.flares || []).map((f, i) => ({
-    r, f,
-    label: multi ? `${shortName(r.name)} · F${i + 1}` : `Flare ${i + 1}`,
-    name: multi ? shortName(r.name) : `Flare ${i + 1}`,
-    sub: multi ? `F${i + 1} · ${signed(f.gain)} m` : `${signed(f.gain)} m`,
-  })));
-  if (all.length > 1) {
-    const rows = all.map((a) => summaryRow(a.label, a.f));
-    const tbl = summaryTable(all);
-    root.append(el("section", { class: "card" },
-      el("div", { class: "card-head" },
-        el("h2", {}, "Confronto tra i flare"),
-        csvButton("confronto_flare.csv", SUMMARY_HEADERS, rows)),
-      el("p", { class: "meta" }, "In grassetto il valore migliore di ogni riga; il pallino è il colore del flare nei grafici."),
-      tbl,
-      overlay(all, tbl.paint)));
+  // confronto solo con più file: con un file basta il suo riepilogo
+  if (results.length > 1) {
+    const all = results.flatMap((r, fi) => (r.flares || []).map((f, i) => ({
+      f, label: `${shortName(r.name)} · F${i + 1}`, name: shortName(r.name), sub: `F${i + 1}`,
+      color: fi < FILE_COLORS.length ? FILE_COLORS[fi] : null,
+    })));
+    if (all.length > 1) {
+      const rows = all.map((a) => summaryRow(a.label, a.f));
+      root.append(el("section", { class: "card" },
+        el("div", { class: "card-head" },
+          el("h2", {}, "Confronto tra i flare"),
+          csvButton("confronto_flare.csv", SUMMARY_HEADERS, rows)),
+        legend(),
+        summaryTable(all)));
+    }
   }
   for (const r of results) root.append(fileCard(r));
 }
@@ -497,164 +461,22 @@ function fileCard(r) {
   const groundText = r.groundAuto != null ? `suolo a ${nf(r.ground)} m s.l.m.`
     : (r.ground ? `suolo a ${nf(r.ground)} m (inserito a mano)` : "suolo non trovato: quote sul livello del mare");
   card.append(el("p", { class: "meta" },
-    `${nf(tr.hz)} Hz · volo da ${nf(tr.t[r.lo])} a ${nf(tr.t[r.hi])} s · ${groundText} · ` +
-    `drag polar con ${nf(r.suit.mass)} kg e ${nf(r.suit.area, 1)} m²` +
+    `${nf(tr.hz)} Hz · volo da ${nf(tr.t[r.lo])} a ${nf(tr.t[r.hi])} s · ${groundText}` +
     (tr.hz < 4 ? " · dati sotto i 5 Hz: carichi e rotazioni sono approssimati" : "")));
 
   if (!r.flares.length) {
     card.append(el("p", { class: "err" }, "Nessun flare trovato. Prova a indicare l'intervallo a mano."));
     return card;
   }
-  const tbl = summaryTable(r.flares.map((f, i) => ({ f, label: `F${i + 1}`, sub: `${signed(f.gain)} m` })),
-    { onPick: r.flares.length > 1 ? (k) => show(k) : null });
   const base = stem(r.name);
   const rows = r.flares.map((f, i) => summaryRow(`F${i + 1}`, f));
   card.append(el("div", { class: "block" },
     el("div", { class: "block-head" }, el("h3", {}, "Riepilogo"),
       csvButton(`${base}_flare.csv`, SUMMARY_HEADERS, rows)),
-    tbl));
-  // un flare alla volta: si parte da quello con il guadagno migliore
-  const list = el("div", { class: "flares" });
-  const show = (k) => {
-    list.replaceChildren(flareBlock(tr, r.flares[k], k + 1, r));
-    seg.querySelectorAll("button").forEach((b, j) => b.setAttribute("aria-checked", String(j === k)));
-    if (r.flares.length > 1) tbl.select(k);
-  };
-  const seg = el("div", { class: "seg", role: "radiogroup", "aria-label": "Flare da analizzare" },
-    ...r.flares.map((f, i) => el("button", { type: "button", role: "radio", onclick: () => show(i) },
-      `F${i + 1} · ${signed(f.gain)} m`)));
-  if (r.flares.length > 1) {
-    card.append(el("div", { class: "block flare-pick" },
-      el("span", { class: "field-label" }, "Flare da analizzare"), seg));
-  }
-  card.append(list);
-  show(r.flares.reduce((b, f, i) => (f.gain > r.flares[b].gain ? i : b), 0));
+    r.flares.length > 1 ? legend() : null,
+    summaryTable(r.flares.map((f, i) => ({ f, name: `Flare ${i + 1}`,
+      sub: `orizzontale a ${nf(f.altLevel)} m` })))));
   return card;
-}
-
-function flareBlock(tr, f, n, r) {
-  const from = Math.max(r.lo, idx(tr, Math.min(tr.t[f.ipk] - 1, f.tLevel - 8)));
-  const to = Math.min(r.hi, idx(tr, tr.t[f.top] + 1));
-  const range = []; for (let i = from; i <= to; i++) range.push(i);
-  const x = range.map((i) => tr.t[i] - f.tLevel);
-  const marks = f.marks;
-
-  return el("div", { class: "flare" },
-    el("div", { class: "block-head" }, el("h3", {}, `Flare ${n}`, el("span", { class: "gain" }, `${signed(f.gain, 1)} m`)),
-      el("span", { class: "hint" }, `orizzontale a ${nf(tr.t[f.lv], 1)} s · ${nf(f.altLevel)} m dal suolo`)),
-    el("div", { class: "flare-grid" },
-      panel("Dive angle", "° · come in FlySight Viewer, negativo = salita",
-        lineChart({ x, unit: "°", xUnit: "s", height: 240, marks, zero: true,
-          series: [{ label: "Dive angle", color: "var(--s1)", values: range.map((i) => -tr.gam[i]) }] })),
-      panel("Carico sulle ali", "g · 0 s = orizzontale",
-        lineChart({ x, unit: "g", xUnit: "s", height: 240, marks, digits: 2, zero: true,
-          series: [{ label: "Carico", color: "var(--s1)", values: range.map((i) => tr.n[i]) }] })),
-      panel("Drag polar", "da V max all'apice · rette a L/D costante",
-        polarChart([polarTrace(r, f, "", "var(--s1)", true)])),
-      panel("Velocità totale", "km/h",
-        lineChart({ x, unit: "km/h", xUnit: "s", height: 240, marks,
-          series: [{ label: "V totale", color: "var(--s1)", values: range.map((i) => tr.vt[i] * KMH) }] }))),
-    el("details", {},
-      el("summary", {}, "Carico per inclinazione e dati completi"),
-      el("div", { class: "block" },
-        table(["", ...f.byAngle.map((b) => b.label)], [["carico (g)", ...f.byAngle.map((b) => nf(b.value, 1))]])),
-      el("div", { class: "block" },
-        table(["t (s)", "dive angle (°)", "V tot (km/h)", "V orizz.", "V vert.", "carico (g)", "quota (m)"],
-          range.filter((_, k) => k % 2 === 0).map((i) => [nf(tr.t[i] - f.tLevel, 1), nf(-tr.gam[i]), nf(tr.vt[i] * KMH),
-            nf(tr.vh[i] * KMH), nf(tr.vd[i] * KMH), nf(tr.n[i], 2), nf(tr.alt[i] - r.ground)])))));
-}
-
-// traccia della drag polar (CD in x, CL in y); con marks segna i momenti chiave del flare
-function polarTrace(r, f, label, color, marks = false) {
-  const tr = r.tr;
-  const ix = polarRange(tr, f);
-  const c = ix.map((i) => coeffs(tr, i, r.suit));
-  const w = Math.max(1, Math.round(0.6 * tr.hz)) | 1;
-  const out = { label, color, x: movingAvg(c.map((v) => v.cd), w), y: movingAvg(c.map((v) => v.cl), w), t: ix.map((i) => tr.t[i] - f.tLevel),
-    extra: ix.map((i) => `L/D ${nf(tr.aL[i] / tr.aD[i], 2)} · ${nf(tr.vt[i] * KMH)} km/h`) };
-  if (marks) {
-    out.marks = [["V max", f.ipk], ["orizz.", f.lv], ["picco g", f.pk], ["apice", f.top]]
-      .map(([lbl, i]) => ({ label: lbl, i: ix.length ? nearest(ix, i) : -1 }))
-      .filter((m, k, a) => m.i >= 0 && a.findIndex((o) => o.i === m.i) === k);
-  }
-  return out;
-}
-
-function polarChart(traces, extra = {}) {
-  const max = Math.max(0, ...traces.flatMap((t) => t.y.map((y, i) => y / t.x[i]).filter(Number.isFinite)));
-  const rays = max < 1.5 ? [0.5, 1] : [];
-  for (let v = 1; v <= Math.ceil(max) && max >= 1.5; v++) rays.push(v);
-  return xyChart({ traces, xName: "CD", yName: "CL", xUnit: "", yUnit: "", digits: 2, xDigits: 2,
-    origin: true, rays, rayLabel: "L/D", minH: 240, maxH: 320, ...extra });
-}
-
-// confronto: sovrapposizione dei flare scelti
-function overlay(all, paintCol = () => {}) {
-  const chosen = all.map((_, i) => (i < FLARE_COLORS.length ? i : null));
-  const charts = el("div", { class: "flare-grid" });
-  const boxes = el("div", { class: "picks" });
-  function update() {
-    const used = chosen.filter((c) => c != null).length;
-    boxes.querySelectorAll("button").forEach((b, i) => { b.disabled = chosen[i] == null && used >= FLARE_COLORS.length; });
-    const sel = all.flatMap((a, i) => (chosen[i] == null ? [] : [{ ...a, color: FLARE_COLORS[chosen[i]] }]));
-    if (!sel.length) { charts.replaceChildren(el("p", { class: "hint" }, "Nessun flare selezionato.")); return; }
-    // da 7 s prima a 5 s dopo l'orizzontale, con 0 s = orizzontale
-    const timeTrace = (val) => sel.map(({ r, f, label, color }) => {
-      const tr = r.tr; const ix = [];
-      for (let i = Math.max(r.lo, idx(tr, f.tLevel - 7)); i <= Math.min(r.hi, idx(tr, f.tLevel + 5)); i++) ix.push(i);
-      return { label, color, x: ix.map((i) => tr.t[i] - f.tLevel), y: ix.map((i) => val(tr, i)), t: ix.map((i) => tr.t[i] - f.tLevel) };
-    });
-    charts.replaceChildren(
-      panel("Drag polar", "da V max all'apice · rette a L/D costante",
-        polarChart(sel.map(({ r, f, label, color }) => polarTrace(r, f, label, color)), { legend: false, maxH: 380 }), true),
-      panel("Dive angle", "° · 0 s = orizzontale",
-        xyChart({ traces: timeTrace((tr, i) => -tr.gam[i]), xName: "secondi", yName: "dive angle", xUnit: "s", yUnit: "°",
-          minH: 240, maxH: 320, legend: false })),
-      panel("Carico sulle ali", "g · 0 s = orizzontale",
-        xyChart({ traces: timeTrace((tr, i) => tr.n[i]), xName: "secondi", yName: "carico", xUnit: "s", yUnit: "g",
-          minH: 240, maxH: 320, digits: 2, legend: false })));
-  }
-  all.forEach((a, i) => {
-    const dot = el("i", { class: "dot" });
-    const chip = el("button", { type: "button", class: "chip" }, dot, a.label, el("small", {}, `${signed(a.f.gain)} m`));
-    const paint = () => {
-      const color = chosen[i] == null ? null : FLARE_COLORS[chosen[i]];
-      chip.setAttribute("aria-pressed", String(color != null));
-      dot.style.background = color ?? "transparent";
-      paintCol(i, color);
-    };
-    paint();
-    chip.addEventListener("click", () => {
-      if (chosen[i] == null) {
-        const free = FLARE_COLORS.findIndex((_, c) => !chosen.includes(c));
-        if (free < 0) return;
-        chosen[i] = free;
-      } else chosen[i] = null;
-      paint(); update();
-    });
-    boxes.append(chip);
-  });
-  update();
-  return el("div", { class: "block" },
-    el("div", { class: "block-head" }, el("h3", {}, "Grafici sovrapposti"),
-      el("span", { class: "hint" }, `tocca un flare per toglierlo o aggiungerlo · al massimo ${FLARE_COLORS.length} insieme`)),
-    boxes, charts);
-}
-
-function table(headers, rows, { best = null } = {}) {
-  let bestRow = -1;
-  if (best != null && rows.length > 1) {
-    let bv = -Infinity;
-    rows.forEach((row, i) => { const v = Number(String(row[best]).replace(",", ".")); if (v > bv) { bv = v; bestRow = i; } });
-  }
-  const head = el("tr", {}, ...headers.map((h) => el("th", { scope: "col" }, String(h))));
-  const body = el("tbody");
-  rows.forEach((row, i) => {
-    const trow = el("tr", i === bestRow ? { class: "marked" } : {});
-    row.forEach((v) => trow.append(el("td", {}, String(v))));
-    body.append(trow);
-  });
-  return el("div", { class: "scroll" }, el("table", {}, el("thead", {}, head), body));
 }
 
 function csvButton(filename, headers, rows) {
@@ -667,269 +489,6 @@ function downloadCsv(filename, headers, rows) {
   const a = el("a", { href: url, download: filename });
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-// ---------------------------------------------------------------- grafici
-
-const SVG = "http://www.w3.org/2000/svg";
-function s(tag, attrs = {}, text) {
-  const node = document.createElementNS(SVG, tag);
-  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
-  if (text != null) node.textContent = text;
-  return node;
-}
-function niceStep(span, count) {
-  const raw = span / Math.max(1, count);
-  const mag = 10 ** Math.floor(Math.log10(raw));
-  const q = raw / mag;
-  return (q < 1.5 ? 1 : q < 3 ? 2 : q < 7 ? 5 : 10) * mag;
-}
-function ticks(lo, hi, count) {
-  const step = niceStep(hi - lo || 1, count);
-  const out = [];
-  for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-6; v += step) out.push(+v.toFixed(10));
-  return { step, values: out };
-}
-function nearest(xs, v) {
-  let lo = 0, hi = xs.length - 1;
-  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (xs[m] < v) lo = m; else hi = m; }
-  return v - xs[lo] <= xs[hi] - v ? lo : hi;
-}
-const fmt = (v, d) => (Number.isFinite(v) ? v.toFixed(d).replace(".", ",") : "–");
-
-function lineChart(opts) {
-  const { x, series, unit, xUnit, height = 240, marks = [], bands = [], digits = 0, zero = false } = opts;
-  const wrap = el("div", { class: "chart" });
-  if (series.length > 1) {
-    wrap.append(el("div", { class: "legend" }, ...series.map((sr) =>
-      el("span", {}, el("i", { class: "key", style: `background:${sr.color}` }), sr.label))));
-  }
-  const svg = s("svg", { role: "img", tabindex: "0", "aria-label": `Grafico: ${series.map((sr) => sr.label).join(", ")} (${unit}) nel tempo` });
-  const tip = el("div", { class: "tip", hidden: "" });
-  wrap.append(svg, tip);
-  let lastWidth = 0, state = null, current = null;
-
-  function draw() {
-    const width = Math.round(svg.getBoundingClientRect().width || wrap.clientWidth);
-    if (!width || width === lastWidth) return;
-    lastWidth = width;
-    svg.replaceChildren();
-    const m = { l: 40, r: 12, t: marks.length ? 34 : bands.length ? 18 : 8, b: 24 };
-    const w = width - m.l - m.r, h = height - m.t - m.b;
-    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-    svg.setAttribute("height", height);
-    const x0 = x[0], x1 = x[x.length - 1];
-    let ymin = Infinity, ymax = -Infinity;
-    for (const sr of series) for (const v of sr.values) { if (v < ymin) ymin = v; if (v > ymax) ymax = v; }
-    if (zero) { ymin = Math.min(ymin, 0); ymax = Math.max(ymax, 0); }
-    const pad = (ymax - ymin || 1) * 0.06;
-    const yt = ticks(ymin - pad, ymax + pad, Math.max(3, Math.round(h / 45)));
-    const y0 = Math.min(yt.values[0], ymin - pad), y1 = Math.max(yt.values[yt.values.length - 1], ymax + pad);
-    const X = (v) => m.l + ((v - x0) / (x1 - x0 || 1)) * w;
-    const Y = (v) => m.t + (1 - (v - y0) / (y1 - y0 || 1)) * h;
-
-    for (const b of bands) {
-      const bx0 = X(Math.max(x0, b.from)), bx1 = X(Math.min(x1, b.to));
-      svg.append(s("rect", { class: "band", x: bx0, y: m.t, width: Math.max(2, bx1 - bx0), height: h }));
-      svg.append(s("text", { class: "band-label", x: (bx0 + bx1) / 2, y: m.t - 5, "text-anchor": "middle" }, b.label));
-    }
-    for (const v of yt.values) {
-      if (v < y0 || v > y1) continue;
-      const yy = Y(v);
-      svg.append(s("line", { class: v === 0 ? "baseline" : "gridline", x1: m.l, x2: m.l + w, y1: yy, y2: yy }));
-      svg.append(s("text", { class: "tick", x: m.l - 6, y: yy + 4, "text-anchor": "end" }, fmt(v, yt.step < 1 ? (yt.step < 0.1 ? 2 : 1) : 0)));
-    }
-    svg.append(s("line", { class: "baseline", x1: m.l, x2: m.l + w, y1: m.t + h, y2: m.t + h }));
-    const xt = ticks(x0, x1, Math.max(2, Math.round(w / 80)));
-    for (const v of xt.values) {
-      svg.append(s("text", { class: "tick", x: X(v), y: m.t + h + 16, "text-anchor": "middle" },
-        `${fmt(v, xt.step < 1 ? 1 : 0)}${v === xt.values[xt.values.length - 1] ? " " + xUnit : ""}`));
-    }
-    // etichette degli eventi su due righe; se non c'è posto resta solo la linea
-    const rowEnd = [-Infinity, -Infinity];
-    [...marks].sort((p, q) => p.t - q.t).forEach((mk) => {
-      if (mk.t < x0 || mk.t > x1) return;
-      const xx = X(mk.t);
-      const lw = mk.label.length * 6 + 6;
-      const anchor = xx < m.l + 40 ? "start" : xx > m.l + w - 40 ? "end" : "middle";
-      const left = anchor === "start" ? xx : anchor === "end" ? xx - lw : xx - lw / 2;
-      const row = rowEnd.findIndex((end) => left > end);
-      svg.append(s("line", { class: "mark-line", x1: xx, x2: xx, y1: row < 0 ? m.t : m.t - (row ? 4 : 18), y2: m.t + h }));
-      if (row < 0) return;
-      rowEnd[row] = left + lw;
-      svg.append(s("text", { class: "mark-label", x: xx, y: m.t - (row ? 6 : 20), "text-anchor": anchor }, mk.label));
-    });
-    for (const sr of series) {
-      let d = "";
-      sr.values.forEach((v, i) => { d += `${i ? "L" : "M"}${X(x[i]).toFixed(1)},${Y(v).toFixed(1)}`; });
-      svg.append(s("path", { d, fill: "none", stroke: sr.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
-    }
-    const cross = s("line", { class: "cross", y1: m.t, y2: m.t + h, visibility: "hidden" });
-    const dots = series.map((sr) => s("circle", { r: 4, fill: sr.color, stroke: "var(--surface)", "stroke-width": 2, visibility: "hidden" }));
-    svg.append(cross, ...dots);
-    state = { X, Y, m, w, cross, dots };
-  }
-  function show(i) {
-    if (!state) return;
-    const { X, Y, cross, dots, m, w } = state;
-    const xx = X(x[i]);
-    cross.setAttribute("x1", xx); cross.setAttribute("x2", xx); cross.setAttribute("visibility", "visible");
-    series.forEach((sr, k) => { dots[k].setAttribute("cx", xx); dots[k].setAttribute("cy", Y(sr.values[i])); dots[k].setAttribute("visibility", "visible"); });
-    tip.replaceChildren(el("div", { class: "tip-head" }, `${fmt(x[i], 1)} ${xUnit}`),
-      ...series.map((sr) => el("div", { class: "tip-row" }, el("i", { class: "key", style: `background:${sr.color}` }),
-        el("b", {}, `${fmt(sr.values[i], digits)} ${unit}`), el("span", {}, sr.label))));
-    tip.hidden = false;
-    const tw = tip.offsetWidth;
-    tip.style.left = `${Math.max(0, xx + 12 + tw > m.l + w ? xx - 12 - tw : xx + 12)}px`;
-    tip.style.top = `${svg.offsetTop + m.t}px`;
-    current = i;
-  }
-  function hide() {
-    if (!state) return;
-    state.cross.setAttribute("visibility", "hidden");
-    state.dots.forEach((d) => d.setAttribute("visibility", "hidden"));
-    tip.hidden = true;
-  }
-  svg.addEventListener("pointermove", (e) => {
-    if (!state) return;
-    const rect = svg.getBoundingClientRect();
-    const px = (e.clientX - rect.left) * (lastWidth / rect.width);
-    const { m, w } = state;
-    if (px < m.l - 8 || px > m.l + w + 8) return hide();
-    show(nearest(x, x[0] + ((px - m.l) / w) * (x[x.length - 1] - x[0])));
-  });
-  svg.addEventListener("pointerleave", hide);
-  svg.addEventListener("blur", hide);
-  svg.addEventListener("keydown", (e) => {
-    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-    e.preventDefault();
-    const step = (e.shiftKey ? 10 : 1) * (e.key === "ArrowRight" ? 1 : -1);
-    show(Math.min(x.length - 1, Math.max(0, current == null ? 0 : current + step)));
-  });
-  new ResizeObserver(draw).observe(wrap);
-  return wrap;
-}
-
-function xyChart(opts) {
-  const { traces, xName, yName, xUnit, yUnit, minH = 200, maxH = 320, legend = true, digits = 0, xDigits = 0,
-    origin = false, rays = [], rayLabel = "" } = opts;
-  const unitOf = (u) => (u ? ` (${u})` : "");
-  const wrap = el("div", { class: "chart" });
-  if (traces.length > 1 && legend) {
-    wrap.append(el("div", { class: "legend" }, ...traces.map((tr) =>
-      el("span", {}, el("i", { class: tr.dash ? "key dash" : "key", style: tr.dash ? `--c:${tr.color}` : `background:${tr.color}` }), tr.label))));
-  }
-  const svg = s("svg", { role: "img", tabindex: "0", "aria-label": `Grafico: ${yName} in funzione di ${xName}` });
-  const tip = el("div", { class: "tip", hidden: "" });
-  wrap.append(svg, tip);
-  let lastWidth = 0, state = null;
-
-  function draw() {
-    const width = Math.round(svg.getBoundingClientRect().width || wrap.clientWidth);
-    if (!width || width === lastWidth) return;
-    lastWidth = width;
-    svg.replaceChildren();
-    const m = { l: 44, r: 14, t: 12, b: 40 };
-    const w = width - m.l - m.r;
-    const h = Math.max(minH, Math.min(maxH, w * 0.62)) - m.t - m.b;
-    let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
-    for (const tr of traces) {
-      for (const v of tr.x) { if (v < xmin) xmin = v; if (v > xmax) xmax = v; }
-      for (const v of tr.y) { if (v < ymin) ymin = v; if (v > ymax) ymax = v; }
-    }
-    ymin = Math.min(ymin, 0);
-    if (origin) xmin = Math.min(xmin, 0);
-    const px = (xmax - xmin || 1) * 0.04, py = (ymax - ymin || 1) * 0.08;
-    const x0 = origin ? xmin : xmin - px, x1 = xmax + px, y0 = ymin - (ymin < 0 ? py : 0), y1 = ymax + py;
-    const height = Math.round(h + m.t + m.b);
-    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-    svg.setAttribute("height", height);
-    const X = (v) => m.l + ((v - x0) / (x1 - x0)) * w;
-    const Y = (v) => m.t + (1 - (v - y0) / (y1 - y0)) * h;
-    const yt = ticks(y0, y1, Math.max(3, Math.round(h / 45)));
-    for (const v of yt.values) {
-      if (v < y0 || v > y1) continue;
-      svg.append(s("line", { class: v === 0 ? "baseline" : "gridline", x1: m.l, x2: m.l + w, y1: Y(v), y2: Y(v) }));
-      svg.append(s("text", { class: "tick", x: m.l - 6, y: Y(v) + 4, "text-anchor": "end" }, fmt(v, yt.step < 1 ? 1 : 0)));
-    }
-    const xt = ticks(x0, x1, Math.max(2, Math.round(w / 80)));
-    for (const v of xt.values) {
-      if (v < x0 || v > x1) continue;
-      svg.append(s("line", { class: v === 0 ? "baseline" : "gridline", x1: X(v), x2: X(v), y1: m.t, y2: m.t + h }));
-      svg.append(s("text", { class: "tick", x: X(v), y: m.t + h + 16, "text-anchor": "middle" },
-        fmt(v, Math.max(xDigits && xt.step < 0.1 ? xDigits : 0, xt.step < 1 ? 1 : 0))));
-    }
-    // rette dall'origine a rapporto y/x costante (L/D nella drag polar)
-    for (const rr of rays) {
-      let ex = x1, ey = x1 * rr;
-      if (ey > y1) { ey = y1; ex = y1 / rr; }
-      if (ex <= 0 || ey <= 0) continue;
-      svg.append(s("line", { class: "ray", x1: X(0), y1: Y(0), x2: X(ex), y2: Y(ey) }));
-      const top = ey >= y1 - 1e-9;
-      svg.append(s("text", { class: "ray-label", x: X(ex) + (top ? 4 : -4), y: Y(ey) + (top ? 10 : -4),
-        "text-anchor": top ? "start" : "end" }, `${rayLabel} ${fmt(rr, rr % 1 ? 1 : 0)}`));
-    }
-    const pts = [];
-    traces.forEach((tr, k) => {
-      let d = "";
-      tr.x.forEach((v, i) => {
-        const sx = X(v), sy = Y(tr.y[i]);
-        d += `${i ? "L" : "M"}${sx.toFixed(1)},${sy.toFixed(1)}`;
-        if (!tr.dash) pts.push({ k, i, sx, sy });
-      });
-      svg.append(s("path", { d, fill: "none", stroke: tr.color, "stroke-width": tr.dash ? 1.5 : 2,
-        "stroke-dasharray": tr.dash ? "5 4" : "none", "stroke-linejoin": "round", "stroke-linecap": "round" }));
-    });
-    // eventi: pallino + etichetta, spostata se si sovrappone a un'altra
-    const placed = [];
-    for (const tr of traces) {
-      for (const mk of tr.marks || []) {
-        const cx = X(tr.x[mk.i]), cy = Y(tr.y[mk.i]);
-        svg.append(s("circle", { cx, cy, r: 4, fill: tr.color, stroke: "var(--surface)", "stroke-width": 2 }));
-        const right = cx < m.l + w - 80;
-        const lw = mk.label.length * 6.2;
-        const bx = right ? cx + 8 : cx - 8 - lw;
-        const dy = [0, -14, 14, -28, 28].find((d) => !placed.some((p) =>
-          bx < p.x + p.w && p.x < bx + lw && Math.abs(cy + d - p.y) < 13)) ?? 0;
-        placed.push({ x: bx, y: cy + dy, w: lw });
-        svg.append(s("text", { class: "mark-label", x: cx + (right ? 8 : -8), y: cy + dy + 4,
-          "text-anchor": right ? "start" : "end" }, mk.label));
-      }
-    }
-    svg.append(s("text", { class: "tick", x: m.l + w, y: m.t + h + 32, "text-anchor": "end" }, `${xName}${unitOf(xUnit)}`));
-    svg.append(s("text", { class: "tick", x: m.l + 6, y: m.t + 12 }, `${yName}${unitOf(yUnit)}`));
-    const dot = s("circle", { r: 4, stroke: "var(--surface)", "stroke-width": 2, visibility: "hidden" });
-    svg.append(dot);
-    state = { pts, dot };
-  }
-  function show(p) {
-    const tr = traces[p.k];
-    state.dot.setAttribute("cx", p.sx); state.dot.setAttribute("cy", p.sy);
-    state.dot.setAttribute("fill", tr.color); state.dot.setAttribute("visibility", "visible");
-    tip.replaceChildren(
-      el("div", { class: "tip-head" }, `${tr.label ? tr.label + " · " : ""}${fmt(tr.t[p.i], 1)} s`),
-      el("div", { class: "tip-row" }, el("b", {}, `${fmt(tr.x[p.i], xDigits)} ${xUnit}`), el("span", {}, xName)),
-      el("div", { class: "tip-row" }, el("b", {}, `${fmt(tr.y[p.i], digits)} ${yUnit}`), el("span", {}, yName)),
-      tr.extra ? el("div", { class: "tip-row" }, el("span", {}, tr.extra[p.i])) : null);
-    tip.hidden = false;
-    const tw = tip.offsetWidth;
-    tip.style.left = `${Math.max(0, p.sx + 12 + tw > lastWidth ? p.sx - 12 - tw : p.sx + 12)}px`;
-    tip.style.top = `${svg.offsetTop + Math.max(0, p.sy - 30)}px`;
-  }
-  function hide() { if (state) { state.dot.setAttribute("visibility", "hidden"); tip.hidden = true; } }
-  svg.addEventListener("pointermove", (e) => {
-    if (!state) return;
-    const rect = svg.getBoundingClientRect();
-    const sc = lastWidth / rect.width;
-    const qx = (e.clientX - rect.left) * sc, qy = (e.clientY - rect.top) * sc;
-    let best = null, bd = 30 * 30;
-    for (const p of state.pts) { const d = (p.sx - qx) ** 2 + (p.sy - qy) ** 2; if (d < bd) { bd = d; best = p; } }
-    if (best) show(best); else hide();
-  });
-  svg.addEventListener("pointerleave", hide);
-  svg.addEventListener("blur", hide);
-  new ResizeObserver(draw).observe(wrap);
-  return wrap;
 }
 
 // ---------------------------------------------------------------- input
@@ -948,10 +507,6 @@ function init() {
   }
   document.addEventListener("drop", (e) => { const f = e.dataTransfer && e.dataTransfer.files; if (f && f.length) pick(f); });
   $("#rerun").addEventListener("click", () => run(lastFiles));
-  try {
-    const suit = JSON.parse(localStorage.getItem("flare-suit") || "null");
-    if (suit) { $("#mass").value = suit.mass ?? ""; $("#area").value = suit.area ?? ""; }
-  } catch { /* storage non disponibile */ }
 }
 init();
 }

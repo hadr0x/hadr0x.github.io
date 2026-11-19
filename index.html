@@ -31,18 +31,14 @@
     </label>
 
     <details class="manual">
-      <summary>Intervallo, quota del suolo e tuta</summary>
+      <summary>Intervallo e quota del suolo</summary>
       <p>Normalmente il volo viene trovato da solo (dall'uscita all'apertura) e la quota del suolo dai punti
         dopo l'atterraggio. Se non funziona, indica tu dove cercare i flare, in secondi dall'inizio del file,
-        e la quota del suolo in metri sul livello del mare (Reggio Emilia ≈ 36 m).
-        Massa in volo (tu con l'attrezzatura) e superficie della tuta servono solo alla drag polar:
-        cambiano la scala di CL e CD, non la forma né l'L/D. Se li lasci vuoti uso 80 kg e 2 m².</p>
+        e la quota del suolo in metri sul livello del mare (Reggio Emilia ≈ 36 m).</p>
       <div class="manual-row">
         <label>da <input type="number" id="da" step="1" min="0" inputmode="decimal"> s</label>
         <label>a <input type="number" id="a" step="1" min="0" inputmode="decimal"> s</label>
         <label>suolo <input type="number" id="ground" step="1" inputmode="decimal"> m</label>
-        <label>massa <input type="number" id="mass" step="1" min="30" placeholder="80" inputmode="decimal"> kg</label>
-        <label>superficie <input type="number" id="area" step="0.1" min="0.5" placeholder="2" inputmode="decimal"> m²</label>
         <button type="button" id="rerun" disabled>Rianalizza</button>
       </div>
     </details>
@@ -57,8 +53,7 @@
     <dl>
       <dt>Dive angle</dt>
       <dd>L'inclinazione della traiettoria rispetto all'orizzonte, come in FlySight Viewer: positivo in picchiata,
-        0 in orizzontale, negativo in salita. Nei grafici del flare il tempo è contato dal momento in cui diventi
-        orizzontale (0 s).</dd>
+        0 in orizzontale, negativo in salita.</dd>
       <dt>Carico (g)</dt>
       <dd>La pressione sulle ali: 1 g è il volo stabile, di più significa che stai tirando su. Si calcola da quanto
         velocemente curvi la traiettoria e da quanto vai veloce.</dd>
@@ -70,7 +65,10 @@
         La V max è <b>già stabile</b> se nei 3 secondi prima è cresciuta meno di 5 km/h, cioè avevi già raggiunto la velocità
         della picchiata; <b>ancora in aumento</b> vuol dire che hai iniziato a tirare mentre stavi ancora accelerando.</dd>
       <dt>Riepilogo</dt>
-      <dd>Una colonna per flare; con più flare in grassetto c'è il valore migliore di ogni riga.</dd>
+      <dd>Una colonna per flare, con le misure divise in tre fasi: picchiata, richiamata e salita. Con più flare
+        ogni cella è colorata rispetto agli altri della stessa riga: verde verso il migliore, arancio verso il
+        peggiore, senza colore a metà; il migliore è anche in grassetto. Caricando più file compare in cima il
+        confronto con tutti i flare, con un colore per file.</dd>
       <dt>Rotazione 45→25</dt>
       <dd>Quanti gradi al secondo ruoti tra 45° e 25° di picchiata. Paziente = 8 °/s o meno; i flare strappati
         arrivavano a 15–17 °/s. Da 45° all'orizzontale prenditi almeno 5 secondi.</dd>
@@ -89,14 +87,10 @@
         è intorno al 28%; sotto il 22% hai volato troppo in piano.</dd>
       <dt>V apice</dt>
       <dd>La velocità in cima alla salita: sotto 100 km/h attenzione, sotto 90 sei vicino allo stallo.</dd>
-      <dt>Drag polar</dt>
-      <dd>Coefficiente di portanza (CL) contro coefficiente di resistenza (CD), dalla V max all'apice. Si ricava
-        dall'accelerazione: la parte opposta alla velocità è la resistenza, quella perpendicolare la portanza.
-        Le rette tratteggiate sono a L/D costante (portanza diviso resistenza): più il punto sta in alto a sinistra,
-        più la tuta stava volando in modo efficiente. Nel flare scorri lungo la polare: da CL basso in picchiata
-        a CL alto quando tiri. <b>L/D massimo</b> (nel riepilogo) è il valore più alto toccato nel flare; nel CSV
-        c'è anche <b>CL max</b>, quanta portanza hai chiesto al massimo. La forma e l'L/D non dipendono da massa e superficie; il vento costante
-        non cambia l'accelerazione ma sposta un po' la direzione della velocità, quindi leggila come tendenza.</dd>
+      <dt>L/D massimo</dt>
+      <dd>Il rapporto più alto tra portanza e resistenza tra la V max e l'apice, ricavato dall'accelerazione: la parte
+        opposta alla velocità è la resistenza, quella perpendicolare la portanza. Il vento costante non cambia
+        l'accelerazione ma sposta un po' la direzione della velocità, quindi leggilo come tendenza.</dd>
       <dt>Precisione</dt>
       <dd>Il GPS misura la velocità rispetto al suolo, non all'aria: con vento i numeri cambiano un po'. Con file sotto
         i 5 Hz carichi e rotazioni sono approssimati.</dd>

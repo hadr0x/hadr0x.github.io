@@ -169,16 +169,6 @@ tr.marked td { background: var(--band); }
 .cross { stroke: var(--muted); stroke-width: 1; }
 .ray { stroke: var(--axis); stroke-width: 1; stroke-dasharray: 2 4; }
 .ray-label { fill: var(--muted); font-size: 10px; }
-.picks { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 16px; }
-.chip {
-  display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 10px; border-radius: 999px;
-  font-size: 13px; color: var(--muted); background: transparent; border: 1px dashed var(--axis);
-}
-.chip small { color: var(--muted); font-size: 12px; }
-.chip[aria-pressed="true"] { color: var(--ink); background: var(--page); border: 1px solid var(--border); }
-.chip[aria-pressed="true"] small { color: var(--ink-2); }
-.dot { display: inline-block; flex: none; width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--axis); }
-.chip[aria-pressed="true"] .dot { border-color: transparent; }
 .tip {
   position: absolute; top: 0; pointer-events: none; z-index: 2;
   background: var(--surface); color: var(--ink); border: 1px solid var(--border);
@@ -192,35 +182,46 @@ tr.marked td { background: var(--band); }
 .tip-row span:last-child { color: var(--ink-2); }
 
 /* --------------------------------------------------------------- flare */
-.flare > .block-head { flex-wrap: wrap; }
-table.summary th, table.summary td { white-space: normal; text-align: left; vertical-align: top; min-width: 9em; padding: 8px 12px; }
-table.summary tbody th { color: var(--ink-2); font-weight: 400; min-width: 12em; position: sticky; left: 0; background: var(--surface); }
-table.summary thead th:first-child { position: sticky; left: 0; z-index: 1; }
-table.summary td.best { font-weight: 700; }
-table.summary tbody tr + tr th { border-top: 1px solid var(--grid); }
-/* riquadri dei grafici */
-.panel { margin: 0; padding: 14px 14px 10px; background: var(--page); border: 1px solid var(--border); border-radius: 10px; min-width: 0; }
-.panel figcaption { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin-bottom: 6px; }
-.panel-title { font-size: 14px; font-weight: 600; color: var(--ink); }
-.panel-sub { font-size: 12px; color: var(--muted); }
-.panel .tip { background: var(--surface); }
-.flare-grid { gap: 12px; }
+/* colori del riepilogo: verso il migliore / verso il peggiore della riga, e una tinta per fase */
+:root { --good: #1baf7a; --bad: #eb6834; --ph-dive: #2a78d6; --ph-pull: #4a3aa7; --ph-climb: #e87ba4; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --good: #199e70; --bad: #d95926; --ph-dive: #3987e5; --ph-pull: #9085e9; --ph-climb: #d55181; }
+}
+:root[data-theme="dark"] { --good: #199e70; --bad: #d95926; --ph-dive: #3987e5; --ph-pull: #9085e9; --ph-climb: #d55181; }
 
-/* intestazioni del riepilogo e colonna scelta */
-table.summary thead th { vertical-align: bottom; }
-.col-head, .col-pick { display: grid; grid-template-columns: auto 1fr; column-gap: 6px; align-items: center; text-align: left; }
-.col-pick { width: 100%; padding: 4px 6px; margin: -4px -6px; background: none; border: 1px solid transparent; border-radius: 6px; font-size: 13px; }
-.col-pick:hover:not(:disabled) { border-color: var(--axis); }
+table.summary { border-collapse: separate; border-spacing: 0; }
+table.summary th, table.summary td { white-space: normal; text-align: left; vertical-align: top; min-width: 9em; padding: 9px 12px; }
+table.summary tbody td { border-top: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+table.summary tbody th[scope=row] {
+  color: var(--ink-2); font-weight: 400; min-width: 12em; position: sticky; left: 0; z-index: 1;
+  background: var(--surface); border-top: 1px solid var(--grid); border-left: 4px solid var(--ph);
+}
+table.summary thead th { vertical-align: bottom; border-bottom: 1px solid var(--axis); }
+table.summary thead th.corner { position: sticky; left: 0; z-index: 2; }
+table.summary thead th[style*="--col"] { box-shadow: inset 0 3px 0 var(--col); }
+table.summary td.best { font-weight: 700; }
+.ph-dive { --ph: var(--ph-dive); }
+.ph-pull { --ph: var(--ph-pull); }
+.ph-climb { --ph: var(--ph-climb); }
+table.summary tr.phase th {
+  position: static; padding: 7px 12px 5px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink); background: color-mix(in srgb, var(--ph) 16%, var(--surface)); border-left: 4px solid var(--ph);
+}
+table.summary tr.phase th::before {
+  content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; background: var(--ph); vertical-align: 1px;
+}
+table.summary tr.key-row td { font-size: 17px; font-weight: 600; }
+table.summary tr.key-row td.best { font-weight: 800; }
+table.summary tr.key-row th[scope=row] { color: var(--ink); font-weight: 600; }
+.col-head { display: grid; grid-template-columns: auto 1fr; column-gap: 6px; align-items: center; }
 .col-name { grid-column: 2; font-weight: 600; color: var(--ink); }
 .col-sub { grid-column: 2; font-weight: 400; font-size: 12px; color: var(--muted); }
-.col-head .dot, .col-pick .dot { grid-row: 1; grid-column: 1; border-color: transparent; }
-table.summary .sel { background: var(--band); }
-table.summary thead th.sel .col-name { color: var(--accent); }
-h3 .gain { margin-left: 10px; font-size: 14px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
-.flare-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.flare-pick .seg { flex-wrap: wrap; }
-.flare details { margin-top: 16px; font-size: 14px; }
-.flare details summary { color: var(--accent); cursor: pointer; }
+.dot { grid-row: 1; grid-column: 1; display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+.summary-legend { margin: 0 0 10px; }
+.summary-legend .muted { color: var(--muted); }
+.swatch { display: inline-block; width: 14px; height: 14px; border-radius: 4px; }
+.swatch.good { background: color-mix(in srgb, var(--good) 30%, transparent); box-shadow: inset 0 0 0 1px var(--good); }
+.swatch.bad { background: color-mix(in srgb, var(--bad) 30%, transparent); box-shadow: inset 0 0 0 1px var(--bad); }
 tr.marked td { font-weight: 600; }
 
 /* ----------------------------------------------------------------- help */

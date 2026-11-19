@@ -293,7 +293,7 @@ function setStatus(text, isError = false) {
 }
 const nextFrame = () => new Promise((r) => setTimeout(r, 30));
 function readNumber(id) {
-  const v = $(id).value.trim().replace(",", ".");
+  const v = ($(id)?.value ?? "").trim().replace(",", ".");
   return v === "" ? null : Number(v);
 }
 

@@ -169,8 +169,16 @@ tr.marked td { background: var(--band); }
 .cross { stroke: var(--muted); stroke-width: 1; }
 .ray { stroke: var(--axis); stroke-width: 1; stroke-dasharray: 2 4; }
 .ray-label { fill: var(--muted); font-size: 10px; }
-.picks { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 4px 0 12px; }
-.picks .check { margin: 0; }
+.picks { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 16px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 10px; border-radius: 999px;
+  font-size: 13px; color: var(--muted); background: transparent; border: 1px dashed var(--axis);
+}
+.chip small { color: var(--muted); font-size: 12px; }
+.chip[aria-pressed="true"] { color: var(--ink); background: var(--page); border: 1px solid var(--border); }
+.chip[aria-pressed="true"] small { color: var(--ink-2); }
+.dot { display: inline-block; flex: none; width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--axis); }
+.chip[aria-pressed="true"] .dot { border-color: transparent; }
 .tip {
   position: absolute; top: 0; pointer-events: none; z-index: 2;
   background: var(--surface); color: var(--ink); border: 1px solid var(--border);
@@ -190,6 +198,25 @@ table.summary tbody th { color: var(--ink-2); font-weight: 400; min-width: 12em;
 table.summary thead th:first-child { position: sticky; left: 0; z-index: 1; }
 table.summary td.best { font-weight: 700; }
 table.summary tbody tr + tr th { border-top: 1px solid var(--grid); }
+/* riquadri dei grafici */
+.panel { margin: 0; padding: 14px 14px 10px; background: var(--page); border: 1px solid var(--border); border-radius: 10px; min-width: 0; }
+.panel figcaption { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin-bottom: 6px; }
+.panel-title { font-size: 14px; font-weight: 600; color: var(--ink); }
+.panel-sub { font-size: 12px; color: var(--muted); }
+.panel .tip { background: var(--surface); }
+.flare-grid { gap: 12px; }
+
+/* intestazioni del riepilogo e colonna scelta */
+table.summary thead th { vertical-align: bottom; }
+.col-head, .col-pick { display: grid; grid-template-columns: auto 1fr; column-gap: 6px; align-items: center; text-align: left; }
+.col-pick { width: 100%; padding: 4px 6px; margin: -4px -6px; background: none; border: 1px solid transparent; border-radius: 6px; font-size: 13px; }
+.col-pick:hover:not(:disabled) { border-color: var(--axis); }
+.col-name { grid-column: 2; font-weight: 600; color: var(--ink); }
+.col-sub { grid-column: 2; font-weight: 400; font-size: 12px; color: var(--muted); }
+.col-head .dot, .col-pick .dot { grid-row: 1; grid-column: 1; border-color: transparent; }
+table.summary .sel { background: var(--band); }
+table.summary thead th.sel .col-name { color: var(--accent); }
+h3 .gain { margin-left: 10px; font-size: 14px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
 .flare-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .flare-pick .seg { flex-wrap: wrap; }
 .flare details { margin-top: 16px; font-size: 14px; }

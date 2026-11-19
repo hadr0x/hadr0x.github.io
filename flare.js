@@ -373,6 +373,17 @@ async function run(files) {
 const nf = (v, d = 0) => (v == null || !Number.isFinite(v) ? "–" : v.toFixed(d).replace(".", ","));
 const signed = (v, d = 0) => (v == null || !Number.isFinite(v) ? "–" : (v > 0 ? "+" : "") + nf(v, d));
 function stem(name) { return name.replace(/\.[^.]+$/, ""); }
+function shortName(name) {
+  const m = stem(name).match(/^(\d\d)-(\d\d)-(\d\d)_.*_(\d\d)-(\d\d)$/);
+  return m ? `${+m[3]}/${+m[2]} ${m[4]}:${m[5]}` : stem(name);
+}
+
+// riquadro di un grafico: titolo, sottotitolo e grafico
+function panel(title, sub, chart, wide = false) {
+  return el("figure", { class: wide ? "panel wide" : "panel" },
+    el("figcaption", {}, el("span", { class: "panel-title" }, title), sub ? el("span", { class: "panel-sub" }, sub) : null),
+    chart);
+}
 
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
@@ -417,8 +428,13 @@ const SUMMARY = [
   { label: "L/D massimo (drag polar)", text: (f) => nf(f.ldMax, 2), value: (f) => f.ldMax, best: "max" },
 ];
 
-function summaryTable(items) {
-  const head = el("tr", {}, el("th", { scope: "col" }, ""), ...items.map((a) => el("th", { scope: "col" }, a.label)));
+function summaryTable(items, { onPick = null } = {}) {
+  const head = el("tr", {}, el("th", { scope: "col" }, ""), ...items.map((a, k) => {
+    const content = [el("i", { class: "dot", hidden: "" }), el("span", { class: "col-name" }, a.name ?? a.label),
+      a.sub ? el("span", { class: "col-sub" }, a.sub) : null];
+    return el("th", { scope: "col", "data-col": k },
+      onPick ? el("button", { type: "button", class: "col-pick", onclick: () => onPick(k) }, ...content) : el("span", { class: "col-head" }, ...content));
+  }));
   const body = el("tbody");
   for (const row of SUMMARY) {
     let bestK = -1;
@@ -430,9 +446,20 @@ function summaryTable(items) {
       });
     }
     body.append(el("tr", {}, el("th", { scope: "row" }, row.label),
-      ...items.map((a, k) => el("td", k === bestK ? { class: "best" } : {}, row.text(a.f)))));
+      ...items.map((a, k) => el("td", { "data-col": k, ...(k === bestK ? { class: "best" } : {}) }, row.text(a.f)))));
   }
-  return el("div", { class: "scroll" }, el("table", { class: "summary" }, el("thead", {}, head), body));
+  const tbl = el("table", { class: "summary" }, el("thead", {}, head), body);
+  const wrap = el("div", { class: "scroll" }, tbl);
+  // evidenzia la colonna k (flare scelto)
+  wrap.select = (k) => tbl.querySelectorAll("[data-col]").forEach((c) => c.classList.toggle("sel", Number(c.dataset.col) === k));
+  // pallino col colore del flare nei grafici del confronto (null = non sovrapposto)
+  wrap.paint = (k, color) => {
+    const d = tbl.querySelector(`thead [data-col="${k}"] .dot`);
+    if (!d) return;
+    d.hidden = !color;
+    if (color) d.style.background = color;
+  };
+  return wrap;
 }
 
 // ---------------------------------------------------------------- render
@@ -440,30 +467,37 @@ function summaryTable(items) {
 function render(results) {
   const root = $("#results");
   root.replaceChildren();
+  const multi = results.length > 1;
   const all = results.flatMap((r) => (r.flares || []).map((f, i) => ({
-    r, f, label: results.length > 1 ? `${stem(r.name)} · F${i + 1}` : `Flare ${i + 1}`,
+    r, f,
+    label: multi ? `${shortName(r.name)} · F${i + 1}` : `Flare ${i + 1}`,
+    name: multi ? shortName(r.name) : `Flare ${i + 1}`,
+    sub: multi ? `F${i + 1} · ${signed(f.gain)} m` : `${signed(f.gain)} m`,
   })));
   if (all.length > 1) {
     const rows = all.map((a) => summaryRow(a.label, a.f));
+    const tbl = summaryTable(all);
     root.append(el("section", { class: "card" },
-      el("div", { class: "block-head" },
+      el("div", { class: "card-head" },
         el("h2", {}, "Confronto tra i flare"),
         csvButton("confronto_flare.csv", SUMMARY_HEADERS, rows)),
-      el("p", { class: "hint" }, "In grassetto il valore migliore di ogni riga."),
-      summaryTable(all),
-      overlay(all)));
+      el("p", { class: "meta" }, "In grassetto il valore migliore di ogni riga; il pallino è il colore del flare nei grafici."),
+      tbl,
+      overlay(all, tbl.paint)));
   }
   for (const r of results) root.append(fileCard(r));
 }
 
 function fileCard(r) {
-  const card = el("section", { class: "card" }, el("div", { class: "card-head" }, el("h2", {}, r.name)));
+  const short = shortName(r.name);
+  const card = el("section", { class: "card" }, el("div", { class: "card-head" }, el("h2", {}, short),
+    short !== stem(r.name) ? el("span", { class: "hint" }, r.name) : null));
   if (r.error) { card.append(el("p", { class: "err" }, r.error)); return card; }
   const tr = r.tr;
   const groundText = r.groundAuto != null ? `suolo a ${nf(r.ground)} m s.l.m.`
     : (r.ground ? `suolo a ${nf(r.ground)} m (inserito a mano)` : "suolo non trovato: quote sul livello del mare");
   card.append(el("p", { class: "meta" },
-    `${tr.t.length} punti a ${nf(tr.hz)} Hz · volo da ${nf(tr.t[r.lo])} s a ${nf(tr.t[r.hi])} s · ${groundText} · ` +
+    `${nf(tr.hz)} Hz · volo da ${nf(tr.t[r.lo])} a ${nf(tr.t[r.hi])} s · ${groundText} · ` +
     `drag polar con ${nf(r.suit.mass)} kg e ${nf(r.suit.area, 1)} m²` +
     (tr.hz < 4 ? " · dati sotto i 5 Hz: carichi e rotazioni sono approssimati" : "")));
 
@@ -471,17 +505,20 @@ function fileCard(r) {
     card.append(el("p", { class: "err" }, "Nessun flare trovato. Prova a indicare l'intervallo a mano."));
     return card;
   }
+  const tbl = summaryTable(r.flares.map((f, i) => ({ f, label: `F${i + 1}`, sub: `${signed(f.gain)} m` })),
+    { onPick: r.flares.length > 1 ? (k) => show(k) : null });
   const base = stem(r.name);
   const rows = r.flares.map((f, i) => summaryRow(`F${i + 1}`, f));
   card.append(el("div", { class: "block" },
     el("div", { class: "block-head" }, el("h3", {}, "Riepilogo"),
       csvButton(`${base}_flare.csv`, SUMMARY_HEADERS, rows)),
-    summaryTable(r.flares.map((f, i) => ({ f, label: `F${i + 1}` })))));
+    tbl));
   // un flare alla volta: si parte da quello con il guadagno migliore
   const list = el("div", { class: "flares" });
   const show = (k) => {
     list.replaceChildren(flareBlock(tr, r.flares[k], k + 1, r));
     seg.querySelectorAll("button").forEach((b, j) => b.setAttribute("aria-checked", String(j === k)));
+    if (r.flares.length > 1) tbl.select(k);
   };
   const seg = el("div", { class: "seg", role: "radiogroup", "aria-label": "Flare da analizzare" },
     ...r.flares.map((f, i) => el("button", { type: "button", role: "radio", onclick: () => show(i) },
@@ -503,29 +540,20 @@ function flareBlock(tr, f, n, r) {
   const marks = f.marks;
 
   return el("div", { class: "flare" },
-    el("div", { class: "block-head" }, el("h3", {}, `Flare ${n}`),
-      el("span", { class: "hint" }, `orizzontale a ${nf(tr.t[f.lv], 1)} s · ${nf(f.altLevel)} m`)),
+    el("div", { class: "block-head" }, el("h3", {}, `Flare ${n}`, el("span", { class: "gain" }, `${signed(f.gain, 1)} m`)),
+      el("span", { class: "hint" }, `orizzontale a ${nf(tr.t[f.lv], 1)} s · ${nf(f.altLevel)} m dal suolo`)),
     el("div", { class: "flare-grid" },
-      el("div", {},
-        el("p", { class: "chart-title" }, "Dive angle (°) come in FlySight Viewer · negativo = salita"),
+      panel("Dive angle", "° · come in FlySight Viewer, negativo = salita",
         lineChart({ x, unit: "°", xUnit: "s", height: 240, marks, zero: true,
           series: [{ label: "Dive angle", color: "var(--s1)", values: range.map((i) => -tr.gam[i]) }] })),
-      el("div", {},
-        el("p", { class: "chart-title" }, "Carico sulle ali (g) · 0 s = orizzontale"),
+      panel("Carico sulle ali", "g · 0 s = orizzontale",
         lineChart({ x, unit: "g", xUnit: "s", height: 240, marks, digits: 2, zero: true,
           series: [{ label: "Carico", color: "var(--s1)", values: range.map((i) => tr.n[i]) }] })),
-      el("div", {},
-        el("p", { class: "chart-title" }, "Drag polar · da V max all'apice · rette a L/D costante"),
+      panel("Drag polar", "da V max all'apice · rette a L/D costante",
         polarChart([polarTrace(r, f, "", "var(--s1)", true)])),
-      el("div", {},
-        el("p", { class: "chart-title" }, "Velocità totale (km/h)"),
+      panel("Velocità totale", "km/h",
         lineChart({ x, unit: "km/h", xUnit: "s", height: 240, marks,
-          series: [{ label: "V totale", color: "var(--s1)", values: range.map((i) => tr.vt[i] * KMH) }] })),
-      el("div", { class: "wide" },
-        el("p", { class: "chart-title" }, "Profilo laterale (m) · 0 = punto in cui diventi orizzontale"),
-        xyChart({ traces: [{ label: "", color: "var(--s1)", x: range.map((i) => tr.dist[i] - tr.dist[f.lv]),
-          y: range.map((i) => tr.alt[i] - tr.alt[f.bot]), t: x }],
-          xName: "distanza", yName: "quota sopra il punto più basso", xUnit: "m", yUnit: "m", minH: 220, maxH: 300 }))),
+          series: [{ label: "V totale", color: "var(--s1)", values: range.map((i) => tr.vt[i] * KMH) }] }))),
     el("details", {},
       el("summary", {}, "Carico per inclinazione e dati completi"),
       el("div", { class: "block" },
@@ -541,7 +569,8 @@ function polarTrace(r, f, label, color, marks = false) {
   const tr = r.tr;
   const ix = polarRange(tr, f);
   const c = ix.map((i) => coeffs(tr, i, r.suit));
-  const out = { label, color, x: c.map((v) => v.cd), y: c.map((v) => v.cl), t: ix.map((i) => tr.t[i] - f.tLevel),
+  const w = Math.max(1, Math.round(0.6 * tr.hz)) | 1;
+  const out = { label, color, x: movingAvg(c.map((v) => v.cd), w), y: movingAvg(c.map((v) => v.cl), w), t: ix.map((i) => tr.t[i] - f.tLevel),
     extra: ix.map((i) => `L/D ${nf(tr.aL[i] / tr.aD[i], 2)} · ${nf(tr.vt[i] * KMH)} km/h`) };
   if (marks) {
     out.marks = [["V max", f.ipk], ["orizz.", f.lv], ["picco g", f.pk], ["apice", f.top]]
@@ -560,13 +589,13 @@ function polarChart(traces, extra = {}) {
 }
 
 // confronto: sovrapposizione dei flare scelti
-function overlay(all) {
+function overlay(all, paintCol = () => {}) {
   const chosen = all.map((_, i) => (i < FLARE_COLORS.length ? i : null));
   const charts = el("div", { class: "flare-grid" });
   const boxes = el("div", { class: "picks" });
   function update() {
     const used = chosen.filter((c) => c != null).length;
-    boxes.querySelectorAll("input").forEach((cb, i) => { cb.disabled = chosen[i] == null && used >= FLARE_COLORS.length; });
+    boxes.querySelectorAll("button").forEach((b, i) => { b.disabled = chosen[i] == null && used >= FLARE_COLORS.length; });
     const sel = all.flatMap((a, i) => (chosen[i] == null ? [] : [{ ...a, color: FLARE_COLORS[chosen[i]] }]));
     if (!sel.length) { charts.replaceChildren(el("p", { class: "hint" }, "Nessun flare selezionato.")); return; }
     // da 7 s prima a 5 s dopo l'orizzontale, con 0 s = orizzontale
@@ -576,34 +605,40 @@ function overlay(all) {
       return { label, color, x: ix.map((i) => tr.t[i] - f.tLevel), y: ix.map((i) => val(tr, i)), t: ix.map((i) => tr.t[i] - f.tLevel) };
     });
     charts.replaceChildren(
-      el("div", { class: "wide" }, el("p", { class: "chart-title" }, "Drag polar · da V max all'apice · rette a L/D costante"),
-        polarChart(sel.map(({ r, f, label, color }) => polarTrace(r, f, label, color)), { legend: false, maxH: 380 })),
-      el("div", {}, el("p", { class: "chart-title" }, "Dive angle (°) · 0 s = orizzontale"),
+      panel("Drag polar", "da V max all'apice · rette a L/D costante",
+        polarChart(sel.map(({ r, f, label, color }) => polarTrace(r, f, label, color)), { legend: false, maxH: 380 }), true),
+      panel("Dive angle", "° · 0 s = orizzontale",
         xyChart({ traces: timeTrace((tr, i) => -tr.gam[i]), xName: "secondi", yName: "dive angle", xUnit: "s", yUnit: "°",
           minH: 240, maxH: 320, legend: false })),
-      el("div", {}, el("p", { class: "chart-title" }, "Carico sulle ali (g) · 0 s = orizzontale"),
+      panel("Carico sulle ali", "g · 0 s = orizzontale",
         xyChart({ traces: timeTrace((tr, i) => tr.n[i]), xName: "secondi", yName: "carico", xUnit: "s", yUnit: "g",
           minH: 240, maxH: 320, digits: 2, legend: false })));
   }
   all.forEach((a, i) => {
-    const key = el("i", { class: "key" });
-    const cb = el("input", { type: "checkbox" });
-    cb.checked = chosen[i] != null;
-    const paint = () => { key.style.background = chosen[i] == null ? "var(--axis)" : FLARE_COLORS[chosen[i]]; };
+    const dot = el("i", { class: "dot" });
+    const chip = el("button", { type: "button", class: "chip" }, dot, a.label, el("small", {}, `${signed(a.f.gain)} m`));
+    const paint = () => {
+      const color = chosen[i] == null ? null : FLARE_COLORS[chosen[i]];
+      chip.setAttribute("aria-pressed", String(color != null));
+      dot.style.background = color ?? "transparent";
+      paintCol(i, color);
+    };
     paint();
-    cb.addEventListener("change", () => {
-      if (cb.checked) {
+    chip.addEventListener("click", () => {
+      if (chosen[i] == null) {
         const free = FLARE_COLORS.findIndex((_, c) => !chosen.includes(c));
-        if (free < 0) { cb.checked = false; return; }
+        if (free < 0) return;
         chosen[i] = free;
       } else chosen[i] = null;
       paint(); update();
     });
-    boxes.append(el("label", { class: "check small" }, cb, key, `${a.label} (${signed(a.f.gain)} m)`));
+    boxes.append(chip);
   });
   update();
   return el("div", { class: "block" },
-    el("p", { class: "hint" }, `Scegli quali flare sovrapporre (al massimo ${FLARE_COLORS.length} insieme).`), boxes, charts);
+    el("div", { class: "block-head" }, el("h3", {}, "Grafici sovrapposti"),
+      el("span", { class: "hint" }, `tocca un flare per toglierlo o aggiungerlo · al massimo ${FLARE_COLORS.length} insieme`)),
+    boxes, charts);
 }
 
 function table(headers, rows, { best = null } = {}) {
@@ -710,12 +745,19 @@ function lineChart(opts) {
       svg.append(s("text", { class: "tick", x: X(v), y: m.t + h + 16, "text-anchor": "middle" },
         `${fmt(v, xt.step < 1 ? 1 : 0)}${v === xt.values[xt.values.length - 1] ? " " + xUnit : ""}`));
     }
-    [...marks].sort((p, q) => p.t - q.t).forEach((mk, i) => {
+    // etichette degli eventi su due righe; se non c'è posto resta solo la linea
+    const rowEnd = [-Infinity, -Infinity];
+    [...marks].sort((p, q) => p.t - q.t).forEach((mk) => {
       if (mk.t < x0 || mk.t > x1) return;
       const xx = X(mk.t);
-      svg.append(s("line", { class: "mark-line", x1: xx, x2: xx, y1: m.t - (i % 2 ? 4 : 18), y2: m.t + h }));
+      const lw = mk.label.length * 6 + 6;
       const anchor = xx < m.l + 40 ? "start" : xx > m.l + w - 40 ? "end" : "middle";
-      svg.append(s("text", { class: "mark-label", x: xx, y: m.t - (i % 2 ? 6 : 20), "text-anchor": anchor }, mk.label));
+      const left = anchor === "start" ? xx : anchor === "end" ? xx - lw : xx - lw / 2;
+      const row = rowEnd.findIndex((end) => left > end);
+      svg.append(s("line", { class: "mark-line", x1: xx, x2: xx, y1: row < 0 ? m.t : m.t - (row ? 4 : 18), y2: m.t + h }));
+      if (row < 0) return;
+      rowEnd[row] = left + lw;
+      svg.append(s("text", { class: "mark-label", x: xx, y: m.t - (row ? 6 : 20), "text-anchor": anchor }, mk.label));
     });
     for (const sr of series) {
       let d = "";

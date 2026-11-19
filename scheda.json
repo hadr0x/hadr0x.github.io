@@ -1,69 +1,257 @@
 {
-  "versione": 1,
+  "versione": 3,
   "titolo": "Scheda allenamento",
   "sottotitolo": "Off-season · skydive performance e BASE",
+  "inizio": "2026-11-17",
+  "parametri": [
+    {
+      "id": "FTP",
+      "nome": "FTP",
+      "unita": "W",
+      "come": "ramp test su Zwift"
+    },
+    {
+      "id": "LTHR",
+      "nome": "LTHR bici",
+      "unita": "bpm",
+      "come": "aggiorna se cambia"
+    },
+    {
+      "id": "FCMAX",
+      "nome": "FC max",
+      "unita": "bpm",
+      "come": "aggiorna se cambia"
+    },
+    {
+      "id": "PESO",
+      "nome": "Peso",
+      "unita": "kg",
+      "come": "a digiuno, al mattino",
+      "neutro": true
+    },
+    {
+      "id": "WING",
+      "nome": "Wing-hold massimo",
+      "unita": "s",
+      "come": "continuo, a carico fisso",
+      "tempo": true
+    },
+    {
+      "id": "FLIGHT",
+      "nome": "Flight hold massimo",
+      "unita": "s",
+      "come": "continuo, stessa posizione",
+      "tempo": true
+    },
+    {
+      "id": "TRAZ",
+      "nome": "Trazioni",
+      "unita": "rip",
+      "come": "massimo a corpo libero"
+    },
+    {
+      "id": "BROAD",
+      "nome": "Broad jump",
+      "unita": "cm",
+      "come": "migliore di 3 salti"
+    }
+  ],
+  "test": [
+    {
+      "data": "2026-11-17",
+      "valori": {
+        "FTP": 250,
+        "LTHR": 160,
+        "FCMAX": 176,
+        "PESO": 85
+      },
+      "note": ""
+    }
+  ],
   "meta": [
-    ["Peso", "~85 kg"],
-    ["FTP", "250 W"],
-    ["FC max", "176"],
-    ["LTHR bici", "~160"],
-    ["Motore", "bici · polarizzato 80/20"],
-    ["Trail", "1×/sett"]
+    [
+      "Motore",
+      "bici · polarizzato 80/20"
+    ],
+    [
+      "Ciclo",
+      "3 settimane + 1 scarico"
+    ]
   ],
   "sezioni": [
     {
       "titolo": "Upper body",
       "moduli": [
         {
-          "tag": "U-A", "nome": "Forza + isometrie pesanti", "giorno": "martedì",
+          "tag": "U-A",
+          "nome": "Forza + tendini",
+          "giorno": "martedì",
           "tabelle": [
             {
-              "colonne": ["Esercizio", "Dose"],
+              "colonne": [
+                "Esercizio",
+                "Dose"
+              ],
               "righe": [
-                {"sub": "Isometrie pesanti · tendini, a inizio seduta"},
-                {"c": ["Wing-hold pesante al cavo, di spalle alla colonna", "4×20–30s"]},
-                {"c": ["Trazione isometrica bloccata a metà (zavorrata)", "4×20–30s"]},
-                {"c": ["Extrarotazione isometrica al cavo, braccio a 90°", "3×30–45s/lato"]},
-                {"sub": "Forza"},
-                {"c": ["Trazioni zavorrate", "4×5–6 · +25 kg"]},
-                {"c": ["Military press bilanciere", {"fly": "3×5 · 35 kg", "dz": "4×5–6 · 40 kg"}]},
-                {"c": ["Dip zavorrate", "3×6–8"]},
-                {"sub": "Prehab"},
-                {"c": ["Cuban rotation", "3×12"]},
-                {"c": ["Prone Y–T–W", "3×10 · 4 kg"]}
+                {
+                  "sub": "Tendini · contrazioni da 3s al ~90%, 3s di pausa"
+                },
+                {
+                  "c": [
+                    "Wing-hold pesante al cavo, di spalle alla colonna (carico che tieni al massimo 6–8s)",
+                    "5 × 4×3s"
+                  ]
+                },
+                {
+                  "sub": "Forza"
+                },
+                {
+                  "c": [
+                    "Trazioni zavorrate",
+                    "4×5–6 · +25 kg"
+                  ]
+                },
+                {
+                  "c": [
+                    "Dip zavorrate, fino a 90° di gomito",
+                    "4×6–8"
+                  ]
+                },
+                {
+                  "sub": "Prehab"
+                },
+                {
+                  "c": [
+                    "Extrarotazione isometrica al cavo, braccio a 90°",
+                    "3×30–45s/lato"
+                  ]
+                },
+                {
+                  "c": [
+                    "Face pull con elastico",
+                    "3×20"
+                  ]
+                },
+                {
+                  "c": [
+                    "Prone Y–T–W",
+                    "3×10 · 4 kg"
+                  ]
+                }
               ]
             }
           ],
           "note": []
         },
         {
-          "tag": "U-ISO", "nome": "Isometria lunga · resistenza", "giorno": "giovedì",
+          "tag": "U-ISO",
+          "nome": "Isometria lunga · resistenza",
+          "giorno": "giovedì",
           "tabelle": [
             {
-              "colonne": ["Esercizio", "Dose"],
+              "colonne": [
+                "Esercizio",
+                "Dose"
+              ],
               "righe": [
-                {"c": ["Wing-hold leggero, di spalle al cavo o all'elastico", "fase in corso"]},
-                {"c": ["Arch hold (banana prona)", "una fase indietro"]},
-                {"c": ["Leg-wing hold (prono, elastico alle caviglie, gambe aperte e tese)", "una fase indietro"]},
-                {"c": ["Face pull con elastico (finitura)", "2×20"]}
+                {
+                  "c": [
+                    "Wing-hold leggero in piedi, di spalle al cavo o all'elastico",
+                    "[FASE]"
+                  ]
+                },
+                {
+                  "c": [
+                    "Flight hold supino: hollow, braccia a T con manubri leggeri, gambe tese e aperte con elastico alle caviglie",
+                    "[FASE]"
+                  ]
+                },
+                {
+                  "c": [
+                    "Arch hold (banana prona)",
+                    "2×60s"
+                  ]
+                }
               ]
             },
             {
-              "colonne": ["Fase", "Settimane", "Serie × tempo", "Recupero", "Totale"],
+              "colonne": [
+                "Fase",
+                "Sett. di carico",
+                "Serie × tempo",
+                "Recupero",
+                "Totale"
+              ],
               "numeri": true,
               "righe": [
-                {"c": ["1", "1–2", "6×60s", "60s", "6′"]},
-                {"c": ["2", "3–4", "5×90s", "75s", "7′30″"]},
-                {"c": ["3", "5–6", "4×2′", "90s", "8′"]},
-                {"c": ["4", "7–8", "3×3′", "2′", "9′"]},
-                {"c": ["5", "9–10", "2×5′", "3′", "10′"]},
-                {"c": ["6", "11+", "1×8–10′ + 2×2′", "3′", "12–14′"]}
+                {
+                  "c": [
+                    "1",
+                    "1–2",
+                    "6×60s",
+                    "60s",
+                    "6′"
+                  ]
+                },
+                {
+                  "c": [
+                    "2",
+                    "3–4",
+                    "5×90s",
+                    "75s",
+                    "7′30″"
+                  ]
+                },
+                {
+                  "c": [
+                    "3",
+                    "5–6",
+                    "4×2′",
+                    "90s",
+                    "8′"
+                  ]
+                },
+                {
+                  "c": [
+                    "4",
+                    "7–8",
+                    "3×3′",
+                    "2′",
+                    "9′"
+                  ]
+                },
+                {
+                  "c": [
+                    "5",
+                    "9–10",
+                    "2×5′",
+                    "3′",
+                    "10′"
+                  ]
+                },
+                {
+                  "c": [
+                    "6",
+                    "11+",
+                    "1×8–10′ + 2×2′",
+                    "3′",
+                    "12–14′"
+                  ]
+                }
               ]
             }
           ],
           "note": [
-            {"t": "Carico: quello con cui il primo set è a sforzo 5–6/10. Dopo la fase 6 aumenta elastico o kg e riparti dalla fase 3."},
-            {"t": "Weekend DZ: aggiungi il richiamo del venerdì, una sola serie della fase in corso.", "v": "dz"}
+            {
+              "t": "Wing-hold: carico con cui il primo set è a sforzo 5–6/10. Dopo la fase 6 aumenta elastico o kg e riparti dalla fase 3."
+            },
+            {
+              "t": "Flight hold: se la fase è troppo lunga alza le gambe a 45° o piega le ginocchia, poi abbassale settimana dopo settimana."
+            },
+            {
+              "t": "Weekend DZ: aggiungi il richiamo del venerdì, una sola serie della fase in corso.",
+              "v": "dz"
+            }
           ]
         }
       ]
@@ -72,42 +260,122 @@
       "titolo": "Gambe, tendini, assorbimento",
       "moduli": [
         {
-          "tag": "M2", "nome": "Gambe", "giorno": "lunedì",
+          "tag": "M2",
+          "nome": "Gambe",
+          "giorno": "lunedì",
           "tabelle": [
             {
-              "colonne": ["Esercizio", "Dose"],
+              "colonne": [
+                "Esercizio",
+                "Dose"
+              ],
               "righe": [
-                {"sub": "Tendini · isometrie pesanti, a inizio seduta"},
-                {"c": ["Spanish squat isometrico", "5×45s"]},
-                {"c": ["Calf isometrico su una gamba (ginocchio esteso)", "4×30–45s/gamba"]},
-                {"sub": "Reattività e assorbimento"},
-                {"c": ["Pliometria: pogo · box jump", "4×5 · rec 90″"]},
-                {"c": ["Drop landing (2 piedi 30→60 cm, poi 1 gamba 20→40 cm)", "3×4 · 3×3/gamba"]},
-                {"sub": "Forza"},
-                {"c": ["Trap-bar deadlift", "4×4–6 · 100 kg"]},
-                {"c": ["Bulgarian split squat", "3×8/gamba · 60 kg"]},
-                {"c": ["Hip thrust", "4×8 · 140 kg"]},
-                {"c": ["RDL (alternativa)", "3×8 · 60 kg"]},
-                {"sub": "Eccentriche tendinee"},
-                {"c": ["Nordic curl", "3×6"]},
-                {"c": ["Calf raise eccentrico", "4×10–12"]},
-                {"c": ["Tibialis raise", "3×15"]}
+                {
+                  "sub": "Tendini · contrazioni da 3s al ~90%, 3s di pausa"
+                },
+                {
+                  "c": [
+                    "Spanish squat isometrico",
+                    "5 × 4×3s"
+                  ]
+                },
+                {
+                  "sub": "Reattività e assorbimento"
+                },
+                {
+                  "c": [
+                    "Pogo",
+                    "3×10 contatti"
+                  ]
+                },
+                {
+                  "c": [
+                    "Broad jump con arrivo bloccato 2s",
+                    "4×3 · rec 90″"
+                  ]
+                },
+                {
+                  "c": [
+                    "Drop landing (2 piedi 30→60 cm, poi 1 gamba 20→40 cm)",
+                    "3×4 · 3×3/gamba"
+                  ]
+                },
+                {
+                  "sub": "Forza"
+                },
+                {
+                  "c": [
+                    "Trap-bar deadlift",
+                    "4×4–6 · 100 kg"
+                  ]
+                },
+                {
+                  "c": [
+                    "Bulgarian split squat",
+                    "3×8/gamba · 60 kg"
+                  ]
+                },
+                {
+                  "c": [
+                    "Hip thrust",
+                    "4×8 · 140 kg"
+                  ]
+                },
+                {
+                  "sub": "Eccentriche e caviglia"
+                },
+                {
+                  "c": [
+                    "Nordic curl",
+                    "3×6"
+                  ]
+                },
+                {
+                  "c": [
+                    "Calf raise pesante su una gamba, 3s su · 3s giù",
+                    "3×8/gamba"
+                  ]
+                },
+                {
+                  "c": [
+                    "Tibialis raise",
+                    "3×15"
+                  ]
+                }
               ]
             }
           ],
           "note": []
         },
         {
-          "tag": "M3", "nome": "Core", "giorno": "mercoledì",
+          "tag": "M3",
+          "nome": "Core",
+          "giorno": "mercoledì",
           "tabelle": [
             {
-              "colonne": ["Esercizio", "Dose"],
+              "colonne": [
+                "Esercizio",
+                "Dose"
+              ],
               "righe": [
-                {"c": ["Russian twist", "4×20 · 20 kg"]},
-                {"c": ["Hollow-body hold", "4×30–45s"]},
-                {"c": ["Pallof press + hold", "3×12/lato"]},
-                {"c": ["Supermen instabile", "3×6/lato"]},
-                {"c": ["Copenhagen plank", "3×20s/lato"]}
+                {
+                  "c": [
+                    "Hollow-body hold",
+                    "4×30–45s"
+                  ]
+                },
+                {
+                  "c": [
+                    "Pallof press + hold",
+                    "3×12/lato"
+                  ]
+                },
+                {
+                  "c": [
+                    "Copenhagen plank",
+                    "3×20s/lato"
+                  ]
+                }
               ]
             }
           ],
@@ -116,99 +384,327 @@
       ]
     },
     {
-      "titolo": "Bici · motore aerobico (FTP 250 W)",
+      "titolo": "Bici · motore aerobico",
       "moduli": [
         {
-          "tag": "M5", "nome": "Fondo Z2 · 80% del volume", "giorno": "",
+          "tag": "M5",
+          "nome": "Fondo Z2 · 80% del volume",
+          "giorno": "",
           "tabelle": [
             {
-              "colonne": ["Seduta", "Durata", "Watt", "FC"],
+              "colonne": [
+                "Seduta",
+                "Durata",
+                "Watt",
+                "FC"
+              ],
               "righe": [
-                {"c": ["Z2 steady", "45–75′", "140–188 W", "130–142"]},
-                {"c": ["Long ride", "90–120′", "140–163 W", "125–140"]},
-                {"c": ["Spin pre-volo / recupero", "30–45′", "<140 W", "<125"]}
+                {
+                  "c": [
+                    "Z2 steady",
+                    "45–75′",
+                    "[FTP 56%]–[FTP 75%] W",
+                    "[LTHR 81.3%]–[LTHR 88.8%]"
+                  ]
+                },
+                {
+                  "c": [
+                    "Long ride",
+                    "90–120′",
+                    "[FTP 56%]–[FTP 65%] W",
+                    "[LTHR 78.1%]–[LTHR 87.5%]"
+                  ]
+                },
+                {
+                  "c": [
+                    "Spin pre-volo / recupero",
+                    "30–45′",
+                    "<[FTP 56%] W",
+                    "<[LTHR 78.1%]"
+                  ]
+                }
               ]
             }
           ],
-          "note": [{"t": "Fuori senza misuratore di potenza conta la FC: tetto 142."}]
+          "note": [
+            {
+              "t": "Fuori senza misuratore di potenza conta la FC: tetto [LTHR 88.8%]."
+            }
+          ]
         },
         {
-          "tag": "M6", "nome": "VO2max 30/15", "giorno": "mercoledì",
+          "tag": "M6",
+          "nome": "VO2max 30/15",
+          "giorno": "mercoledì",
           "tabelle": [
             {
-              "colonne": ["Struttura", "Dose", "Watt"],
+              "colonne": [
+                "Struttura",
+                "Dose",
+                "Watt"
+              ],
               "righe": [
-                {"c": ["Rønnestad 30″ on / 15″ off · 3′ tra i set", "3×13", "300–338 / ~125 W"]}
+                {
+                  "c": [
+                    "Rønnestad 30″ on / 15″ off · 3′ tra i set",
+                    "3×13",
+                    "[FTP 120%]–[FTP 135%] / ~[FTP 50%] W"
+                  ]
+                }
               ]
             }
           ],
-          "note": [{"t": "Progressione: 2 set → 3 set → 3×15 ripetute. Si guida a watt: la FC a fine set deve arrivare a 165+."}]
+          "note": [
+            {
+              "t": "Progressione: 2 set → 3 set → 3×15 ripetute. Si guida a watt: la FC a fine set deve arrivare a [FCMAX 93.8%]+."
+            }
+          ]
         },
         {
-          "tag": "M6b", "nome": "Soglia", "giorno": "venerdì",
+          "tag": "M6b",
+          "nome": "Soglia",
+          "giorno": "venerdì",
           "tabelle": [
             {
-              "colonne": ["Protocollo", "Struttura", "Watt", "FC"],
+              "colonne": [
+                "Protocollo",
+                "Struttura",
+                "Watt",
+                "FC"
+              ],
               "righe": [
-                {"c": ["Soglia breve (inizio)", "3×12′ / rec 4′", "235–250 W", "151–159"]},
-                {"c": ["Soglia classica", "2×20′ / rec 5′", "228–245 W", "151–159"]},
-                {"c": ["Over-under", "3×9′ [2′/1′] / rec 4′", "235 / 265 W", "fino a 163"]}
+                {
+                  "c": [
+                    "Soglia breve (inizio)",
+                    "3×12′ / rec 4′",
+                    "[FTP 94%]–[FTP 100%] W",
+                    "[LTHR 94.4%]–[LTHR 99.4%]"
+                  ]
+                },
+                {
+                  "c": [
+                    "Soglia classica",
+                    "2×20′ / rec 5′",
+                    "[FTP 91%]–[FTP 98%] W",
+                    "[LTHR 94.4%]–[LTHR 99.4%]"
+                  ]
+                },
+                {
+                  "c": [
+                    "Over-under",
+                    "3×9′ [2′/1′] / rec 4′",
+                    "[FTP 94%] / [FTP 106%] W",
+                    "fino a [LTHR 101.9%]"
+                  ]
+                }
               ]
             }
           ],
-          "note": [{"t": "Recupero tra le ripetute a 115–140 W. Parti dal 3×12′, passa al 2×20′ quando gli ultimi minuti restano sotto 160 bpm."}]
+          "note": [
+            {
+              "t": "Recupero tra le ripetute a [FTP 46%]–[FTP 56%] W. Parti dal 3×12′, passa al 2×20′ quando gli ultimi minuti restano sotto [LTHR] bpm."
+            }
+          ]
         }
       ]
     },
     {
-      "titolo": "Trail · economia in salita",
+      "titolo": "Trail e approcci",
       "moduli": [
         {
-          "tag": "M9", "nome": "Trail facile · 1×/sett", "giorno": "sabato mattina",
+          "tag": "M9",
+          "nome": "Trail o salita con zaino · 1×/sett",
+          "giorno": "sabato mattina",
           "tabelle": [
             {
-              "colonne": ["Settimane", "Durata", "Dislivello", "FC"],
+              "colonne": [
+                "Settimane",
+                "Durata",
+                "Dislivello",
+                "FC"
+              ],
               "righe": [
-                {"c": ["1–2", "40′", "200–300 m", "<148"]},
-                {"c": ["3–4", "50′", "300–400 m", "<148"]},
-                {"c": ["5–6", "60′", "400–500 m", "<148"]},
-                {"c": ["7+", "75–90′", "500–800 m", "<148"]}
+                {
+                  "c": [
+                    "1–2",
+                    "40′",
+                    "200–300 m",
+                    "<[LTHR 92.5%]"
+                  ]
+                },
+                {
+                  "c": [
+                    "3–4",
+                    "50′",
+                    "300–400 m",
+                    "<[LTHR 92.5%]"
+                  ]
+                },
+                {
+                  "c": [
+                    "5–6",
+                    "60′",
+                    "400–500 m",
+                    "<[LTHR 92.5%]"
+                  ]
+                },
+                {
+                  "c": [
+                    "7+",
+                    "75–90′",
+                    "500–800 m",
+                    "<[LTHR 92.5%]"
+                  ]
+                }
               ]
             }
           ],
-          "note": [{"t": "Salite ripide camminate quando la FC supera il tetto. Discese corte e controllate all'inizio. Terreno morbido, niente asfalto."}]
+          "note": [
+            {
+              "t": "Alterna: una settimana trail di corsa, la successiva salita camminata con zaino, da 8 kg fino al peso reale del tuo zaino da approccio. Stessa durata e stessa FC."
+            },
+            {
+              "t": "Salite ripide camminate quando la FC supera il tetto. Discese corte e controllate all'inizio. Terreno morbido, niente asfalto."
+            }
+          ]
         }
       ]
     },
     {
-      "titolo": "Recupero",
+      "titolo": "In dropzone e recupero",
       "moduli": [
         {
-          "tag": "M7", "nome": "Nuoto · mobilità · 1×/sett", "giorno": "",
+          "tag": "A0",
+          "nome": "Attivazione pre-volo · 5′",
+          "giorno": "prima del primo load",
           "tabelle": [
             {
-              "colonne": ["Blocco", "Dose"],
+              "colonne": [
+                "Esercizio",
+                "Dose"
+              ],
               "righe": [
-                {"c": ["Stili misti", "400–600 m"]},
-                {"c": ["Dorso bracciata ampia", "6–8×50 m"]},
-                {"c": ["Nuoto facile continuo", "300–500 m"]}
+                {
+                  "c": [
+                    "Face pull con elastico",
+                    "1×15"
+                  ]
+                },
+                {
+                  "c": [
+                    "Extrarotazione con elastico, braccio a 90°",
+                    "1×12/lato"
+                  ]
+                },
+                {
+                  "c": [
+                    "Wing-hold con elastico",
+                    "2×20s"
+                  ]
+                }
               ]
             }
           ],
           "note": []
         },
         {
-          "tag": "M8", "nome": "Sauna · 2–3×/sett", "giorno": "",
+          "tag": "M7",
+          "nome": "Nuoto · mobilità · 1×/sett",
+          "giorno": "",
           "tabelle": [
             {
-              "colonne": ["Uso", "Dose"],
+              "colonne": [
+                "Blocco",
+                "Dose"
+              ],
               "righe": [
-                {"c": ["Dopo long ride · 80–100°C", "15–30′"]},
-                {"c": ["1–2h prima di dormire", "15–20′"]}
+                {
+                  "c": [
+                    "Stili misti",
+                    "400–600 m"
+                  ]
+                },
+                {
+                  "c": [
+                    "Dorso bracciata ampia",
+                    "6–8×50 m"
+                  ]
+                },
+                {
+                  "c": [
+                    "Nuoto facile continuo",
+                    "300–500 m"
+                  ]
+                }
               ]
             }
           ],
           "note": []
+        },
+        {
+          "tag": "M8",
+          "nome": "Sauna · 2–3×/sett",
+          "giorno": "",
+          "tabelle": [
+            {
+              "colonne": [
+                "Uso",
+                "Dose"
+              ],
+              "righe": [
+                {
+                  "c": [
+                    "Dopo long ride · 80–100°C",
+                    "15–30′"
+                  ]
+                },
+                {
+                  "c": [
+                    "1–2h prima di dormire",
+                    "15–20′"
+                  ]
+                }
+              ]
+            }
+          ],
+          "note": []
+        }
+      ]
+    },
+    {
+      "titolo": "Ciclo",
+      "moduli": [
+        {
+          "tag": "B",
+          "nome": "Ciclo 3 + 1",
+          "giorno": "",
+          "tabelle": [
+            {
+              "colonne": [
+                "Settimana",
+                "Cosa cambia"
+              ],
+              "righe": [
+                {
+                  "c": [
+                    "1–3 · carico",
+                    "Scheda piena. Nell'isometria lunga avanzi di fase."
+                  ]
+                },
+                {
+                  "c": [
+                    "4 · scarico",
+                    "Volume −40%, stessa intensità. Isometria lunga: ripeti la fase precedente. Test a fine settimana."
+                  ]
+                }
+              ]
+            }
+          ],
+          "note": [
+            {
+              "t": "La settimana di scarico non conta nelle fasi dell'isometria lunga."
+            }
+          ]
         }
       ]
     }
@@ -216,39 +712,169 @@
   "settimana": {
     "fly": {
       "righe": [
-        ["Lun", "Gambe", "M2 + tendini lower", "forte", "Aerobico", "Z2 bici 30–45′ agile", "facile"],
-        ["Mar", "Upper", "U-A forza + isometrie pesanti", "forte", "Aerobico", "Z2 bici 45–60′", "facile"],
-        ["Mer", "Motore", "VO2max 30/15", "duro", "Core", "M3", "facile"],
-        ["Gio", "Fondo", "Long ride Z2 90–120′ + sauna", "facile", "Upper", "U-ISO isometria lunga", "forte"],
-        ["Ven", "Motore", "Soglia", "duro", "Riposo", "Mobilità o M7 nuoto", "facile"],
-        ["Sab", "Trail", "M9 trail facile", "facile", "DZ", "Volo performance", "volo"],
-        ["Dom", "Pre-volo", "Spin 30–40′ <140 W (opz.)", "facile", "DZ", "Volo performance", "volo"]
+        [
+          "Lun",
+          "Gambe",
+          "M2 + tendini",
+          "forte",
+          "Aerobico",
+          "Z2 bici 30–45′ agile",
+          "facile"
+        ],
+        [
+          "Mar",
+          "Upper",
+          "U-A trazioni, dip + tendini",
+          "forte",
+          "Aerobico",
+          "Z2 bici 45–60′",
+          "facile"
+        ],
+        [
+          "Mer",
+          "Motore",
+          "VO2max 30/15",
+          "duro",
+          "Core",
+          "M3",
+          "facile"
+        ],
+        [
+          "Gio",
+          "Fondo",
+          "Long ride Z2 90–120′ + sauna",
+          "facile",
+          "Upper",
+          "U-ISO isometria lunga",
+          "forte"
+        ],
+        [
+          "Ven",
+          "Motore",
+          "Soglia",
+          "duro",
+          "Riposo",
+          "Mobilità o M7 nuoto",
+          "facile"
+        ],
+        [
+          "Sab",
+          "Trail",
+          "M9 trail o salita con zaino",
+          "facile",
+          "DZ",
+          "Volo performance · A0 prima del primo load",
+          "volo"
+        ],
+        [
+          "Dom",
+          "Pre-volo",
+          "Spin 30–40′ <[FTP 56%] W (opz.)",
+          "facile",
+          "DZ",
+          "Volo performance · A0 prima del primo load",
+          "volo"
+        ]
       ],
-      "nota": "VO2max e soglia a 48h dalle gambe. Il trail del sabato non disturba il volo: carica le gambe, non le spalle."
+      "nota": "VO2max e soglia a 48h dalle gambe. Il sabato mattina carica le gambe, non le spalle: non disturba il volo."
     },
     "dz": {
       "righe": [
-        ["Lun", "Gambe", "M2 + tendini lower", "forte", "Aerobico", "Z2 bici 30–45′ agile", "facile"],
-        ["Mar", "Upper", "U-A forza + isometrie pesanti · military pieno", "forte", "Aerobico", "Z2 bici 45–60′", "facile"],
-        ["Mer", "Motore", "VO2max 30/15", "duro", "Core", "M3", "facile"],
-        ["Gio", "Fondo", "Long ride Z2 90–120′ + sauna", "facile", "Upper", "U-ISO isometria lunga", "forte"],
-        ["Ven", "Motore", "Soglia", "duro", "Richiamo", "1 serie wing-hold della fase in corso", "forte"],
-        ["Sab", "Trail", "M9 trail facile", "facile", "DZ lavoro", "Prehab elastico 10′ tra un load e l'altro", "facile"],
-        ["Dom", "Pre-DZ", "Z2 bici 45′ opz. o riposo", "facile", "DZ lavoro", "—", "facile"]
+        [
+          "Lun",
+          "Gambe",
+          "M2 + tendini",
+          "forte",
+          "Aerobico",
+          "Z2 bici 30–45′ agile",
+          "facile"
+        ],
+        [
+          "Mar",
+          "Upper",
+          "U-A trazioni, dip + tendini",
+          "forte",
+          "Aerobico",
+          "Z2 bici 45–60′",
+          "facile"
+        ],
+        [
+          "Mer",
+          "Motore",
+          "VO2max 30/15",
+          "duro",
+          "Core",
+          "M3",
+          "facile"
+        ],
+        [
+          "Gio",
+          "Fondo",
+          "Long ride Z2 90–120′ + sauna",
+          "facile",
+          "Upper",
+          "U-ISO isometria lunga",
+          "forte"
+        ],
+        [
+          "Ven",
+          "Motore",
+          "Soglia",
+          "duro",
+          "Richiamo",
+          "1 serie wing-hold della fase in corso",
+          "forte"
+        ],
+        [
+          "Sab",
+          "Trail",
+          "M9 trail o salita con zaino",
+          "facile",
+          "DZ lavoro",
+          "Prehab elastico 10′ tra un load e l'altro",
+          "facile"
+        ],
+        [
+          "Dom",
+          "Pre-DZ",
+          "Z2 bici 45′ opz. o riposo",
+          "facile",
+          "DZ lavoro",
+          "—",
+          "facile"
+        ]
       ],
       "nota": "La giornata in DZ non è recupero: niente forza né intensità dopo il lavoro. Salti di lavoro in tuta grande → conta come weekend volo."
     }
   },
   "regole": [
-    ["Isometria lunga", "la serie finisce quando cede la posizione (braccia giù di 5–10 cm, spalle che salgono, gomiti che si piegano), non quando scade il tempo. Il tremore va bene."],
-    ["Test ogni 4 settimane", "wing-hold continuo massimo a carico fisso. Annota tempo e carico."],
-    ["Tendini", "gelatina + vit C 30–60′ prima delle isometrie pesanti, della pliometria e delle eccentriche."],
-    ["Elettroliti", "su long ride, VO2max, soglia e trail."],
-    ["Forza", "range 4–8 rip, mai a cedimento."],
-    ["Spalla, regola 24h", "dolore o rigidità peggiori il mattino dopo → torna indietro di una fase nell'isometria lunga."],
-    ["Trail", "dolore a tendine d'Achille, tibia o ginocchio il giorno dopo → resta alla stessa durata per un'altra settimana."],
-    ["Bici e gambe nello stesso giorno", "prima la bici al mattino, gambe almeno 6h dopo. Mai VO2max o soglia dopo le gambe."],
-    ["Ri-test FTP", "nella settimana di scarico e aggiorna i watt."]
-  ],
-  "piede": "Watt su FTP 250 W · test 17 novembre 2026 · aggiorna al ri-test"
+    [
+      "Tendini",
+      "contrazioni brevi e pesanti (3s al ~90%) a inizio seduta, da fresco. Gelatina + vit C 30–60′ prima. Servono almeno 12 settimane."
+    ],
+    [
+      "Isometria lunga",
+      "la serie finisce quando cede la posizione (braccia giù di 5–10 cm, spalle che salgono, gomiti che si piegano, lombare che si stacca), non quando scade il tempo. Il tremore va bene."
+    ],
+    [
+      "Elettroliti",
+      "su long ride, VO2max, soglia e trail."
+    ],
+    [
+      "Forza",
+      "range 4–8 rip, mai a cedimento."
+    ],
+    [
+      "Spalla, regola 24h",
+      "dolore o rigidità peggiori il mattino dopo → torna indietro di una fase nell'isometria lunga."
+    ],
+    [
+      "Trail",
+      "dolore a tendine d'Achille, tibia o ginocchio il giorno dopo → resta alla stessa durata per un'altra settimana."
+    ],
+    [
+      "Bici e gambe nello stesso giorno",
+      "prima la bici al mattino, gambe almeno 6h dopo. Mai VO2max o soglia dopo le gambe."
+    ]
+  ]
 }

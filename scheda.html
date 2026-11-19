@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Scheda allenamento</title>
-<meta name="description" content="Scheda di allenamento off-season per wingsuit performance e BASE: modificabile e scaricabile.">
+<meta name="description" content="Scheda di allenamento off-season per wingsuit performance e BASE: watt e frequenze calcolati dai test mensili.">
 <link rel="stylesheet" href="style.css">
 <script src="scheda.js" defer></script>
 </head>
@@ -17,44 +17,76 @@
     <a href="scheda.html" aria-current="page">Scheda allenamento</a>
   </nav>
 
-  <header class="top">
-    <h1 id="titolo">Scheda allenamento</h1>
-    <p class="lede" id="sottotitolo"></p>
-    <dl class="sk-meta" id="meta"></dl>
+  <header class="sk-head">
+    <div class="sk-head-text">
+      <h1 id="titolo">Scheda allenamento</h1>
+      <p class="lede" id="sottotitolo"></p>
+      <dl class="sk-meta" id="meta"></dl>
+    </div>
+    <div class="sk-tools" aria-label="Comandi">
+      <div class="seg" role="radiogroup" aria-label="Tipo di weekend">
+        <button type="button" role="radio" aria-checked="true" data-v="fly">Weekend volo</button>
+        <button type="button" role="radio" aria-checked="false" data-v="dz">Weekend DZ</button>
+      </div>
+      <button type="button" id="edit" aria-pressed="false">Modifica</button>
+      <details class="sk-more">
+        <summary>File</summary>
+        <div class="sk-menu">
+          <button type="button" id="dl-json">Scarica JSON</button>
+          <button type="button" id="dl-csv">Scarica CSV</button>
+          <button type="button" id="print">Stampa / PDF</button>
+          <label class="sk-filebtn">Carica JSON<input type="file" id="load" accept=".json,application/json"></label>
+        </div>
+      </details>
+    </div>
   </header>
 
-  <section class="sk-bar" aria-label="Comandi">
-    <div class="sk-bar-group">
-      <span class="sk-bar-label">Weekend</span>
-      <div class="seg" role="radiogroup" aria-label="Tipo di weekend">
-        <button type="button" role="radio" aria-checked="true" data-v="fly">Volo performance</button>
-        <button type="button" role="radio" aria-checked="false" data-v="dz">DZ · lavoro</button>
-      </div>
-    </div>
-    <div class="sk-bar-group">
-      <button type="button" id="edit" aria-pressed="false">Modifica</button>
-      <button type="button" id="dl-json">Scarica JSON</button>
-      <button type="button" id="dl-csv">Scarica CSV</button>
-      <button type="button" id="print">Stampa / PDF</button>
-      <label class="sk-filebtn">Carica JSON<input type="file" id="load" accept=".json,application/json"></label>
-    </div>
+  <p class="status" id="status" role="status" aria-live="polite"></p>
+  <p class="sk-banner" id="local" hidden>Stai vedendo la versione salvata su questo dispositivo.
+    <button type="button" class="linkbtn" id="reset">Torna alla scheda del sito</button></p>
+  <p class="sk-banner" id="edit-hint" hidden>Tocca un testo per cambiarlo; si salva da solo su questo dispositivo.
+    I numeri tra parentesi quadre sono formule: <code>[FTP 56%]</code> è il 56% della FTP,
+    <code>[LTHR 90%]</code> e <code>[FCMAX 94%]</code> le frequenze, <code>[FASE]</code> la fase dell'isometria lunga.</p>
+
+  <section class="sk-hero" aria-label="Situazione attuale">
+    <article class="card sk-now" id="now"></article>
+    <div class="sk-kpis" id="kpis"></div>
   </section>
 
-  <p class="status" id="status" role="status" aria-live="polite"></p>
-  <p class="sk-local" id="local" hidden>Stai vedendo la versione modificata salvata su questo dispositivo.
-    <button type="button" class="linkbtn" id="reset">Torna alla scheda originale</button></p>
-  <p class="sk-edit-hint" id="edit-hint" hidden>Tocca un testo per cambiarlo. Le modifiche si salvano da sole su questo dispositivo.
-    Per renderle definitive sul sito, scarica il JSON e sostituisci <code>scheda.json</code> nel repository.</p>
+  <nav class="sk-toc" id="toc" aria-label="Parti della scheda"></nav>
 
   <div id="content"></div>
 
-  <section class="card sk-week">
-    <h2 id="week-title">Settimana tipo</h2>
-    <div class="scroll"><table class="sk-table sk-week-table" id="week"></table></div>
+  <section class="card sk-block" id="settimana">
+    <div class="sk-block-head">
+      <h2 id="week-title">Settimana tipo</h2>
+      <div class="sk-legend" aria-hidden="true">
+        <span class="k-duro">duro</span><span class="k-forte">forza</span><span class="k-facile">facile</span><span class="k-volo">volo</span>
+      </div>
+    </div>
+    <div class="sk-days" id="week"></div>
     <p class="hint sk-week-note" id="week-note"></p>
   </section>
 
-  <section class="card sk-rules">
+  <section class="card sk-block" id="test">
+    <div class="sk-block-head">
+      <h2>Test e progressi</h2>
+      <span class="sk-chip" id="test-when"></span>
+    </div>
+    <p class="hint">Ogni 4 settimane, a fine scarico. Inserisci solo i valori che hai misurato: gli altri restano quelli dell'ultimo test.
+      FTP, LTHR e FC max ricalcolano tutti i watt e le frequenze della scheda. Annota carico e posizione: un test vale solo se è ripetuto uguale.</p>
+    <form class="sk-form" id="test-form" novalidate>
+      <div class="sk-form-grid" id="test-fields"></div>
+      <div class="sk-form-foot">
+        <label class="sk-field sk-field-date"><span>Data</span><input type="date" id="t-data" required></label>
+        <label class="sk-field sk-field-note"><span>Note (carico, posizione)</span><input type="text" id="t-note" placeholder="es. wing-hold con 10 kg, gambe a 45°"></label>
+        <button type="submit" class="sk-primary">Salva test</button>
+      </div>
+    </form>
+    <div class="scroll sk-hist-wrap"><table class="sk-hist" id="test-history"></table></div>
+  </section>
+
+  <section class="card sk-block sk-rules" id="regole">
     <h2>Regole</h2>
     <ul id="rules"></ul>
   </section>

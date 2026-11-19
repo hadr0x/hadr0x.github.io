@@ -6,8 +6,9 @@
 <title>Analisi Flare</title>
 <meta name="description" content="Analisi del flare da file GPS FlySight di tuta alare, direttamente nel browser.">
 <!-- il numero di versione evita che il browser usi un flare.js vecchio con la pagina nuova -->
-<link rel="stylesheet" href="style.css?v=20261119">
-<script src="flare.js?v=20261119" defer></script>
+<link rel="stylesheet" href="style.css?v=20261119b">
+<script src="flysight-ble.js?v=20261119b" defer></script>
+<script src="flare.js?v=20261119b" defer></script>
 </head>
 <body>
 <main>
@@ -30,6 +31,17 @@
       <span class="drop-title">Trascina qui i file CSV</span>
       <span class="drop-sub">oppure clicca per sceglierli · FlySight 1, FlySight 2 (TRACK.CSV) o CSV di skyderby</span>
     </label>
+
+    <div class="ble" id="ble" hidden>
+      <div class="ble-head">
+        <button type="button" class="primary" id="ble-connect">Collega il FlySight via Bluetooth</button>
+        <span class="ble-status" id="ble-status" role="status" aria-live="polite">Solo FlySight 2: la prima volta mettilo in
+          accoppiamento con un doppio clic sul pulsante (LED verde che pulsa).</span>
+      </div>
+      <div id="ble-sessions"></div>
+    </div>
+    <p class="hint ble-off" id="ble-off" hidden>Per scaricare i file dal FlySight 2 via Bluetooth serve Chrome o Edge
+      (computer e Android) oppure il browser Bluefy su iPhone: Firefox e Safari non lo permettono.</p>
 
     <details class="manual">
       <summary>Intervallo e quota del suolo</summary>
@@ -92,6 +104,12 @@
       <dd>Il rapporto più alto tra portanza e resistenza tra la V max e l'apice, ricavato dall'accelerazione: la parte
         opposta alla velocità è la resistenza, quella perpendicolare la portanza. Il vento costante non cambia
         l'accelerazione ma sposta un po' la direzione della velocità, quindi leggilo come tendenza.</dd>
+      <dt>Bluetooth</dt>
+      <dd>Con un FlySight 2 col firmware ufficiale aggiornato puoi scaricare i salti senza cavo: serve Chrome o Edge
+        (computer e Android) oppure Bluefy su iPhone. La prima volta metti il FlySight in accoppiamento con un doppio clic
+        sul pulsante (LED verde che pulsa), poi premi "Collega": le volte successive basta premere "Collega". I salti sono
+        elencati per giorno con l'ora locale; il collegamento è solo in lettura, sul FlySight non viene scritto né
+        cancellato niente. Tieni la pagina aperta e lo schermo acceso finché lo scaricamento non è finito.</dd>
       <dt>Precisione</dt>
       <dd>Il GPS misura la velocità rispetto al suolo, non all'aria: con vento i numeri cambiano un po'. Con file sotto
         i 5 Hz carichi e rotazioni sono approssimati.</dd>

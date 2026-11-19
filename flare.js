@@ -491,6 +491,141 @@ function downloadCsv(filename, headers, rows) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+// ---------------------------------------------------------------- bluetooth
+
+// sessioni del FlySight 2: cartelle /AA-MM-GG/HH-MM-SS/ in ora UTC, con dentro TRACK.CSV
+const FOLDER = /^(\d\d)-(\d\d)-(\d\d)$/;
+const pad = (v) => String(v).padStart(2, "0");
+
+function sessionOf(day, time) {
+  const [, yy, mo, dd] = day.match(FOLDER);
+  const [, hh, mi, ss] = time.match(FOLDER);
+  const when = new Date(Date.UTC(2000 + +yy, +mo - 1, +dd, +hh, +mi, +ss));
+  const name = `${pad(when.getFullYear() % 100)}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}` +
+    `_FlySight_${pad(when.getHours())}-${pad(when.getMinutes())}.CSV`;
+  return { dir: `/${day}/${time}`, when, name };
+}
+
+function setupBluetooth() {
+  const box = $("#ble");
+  if (!box) return;
+  if (!window.FlySightBLE || !FlySightBLE.supported()) { $("#ble-off").hidden = false; return; }
+  box.hidden = false;
+  const fs = new FlySightBLE();
+  const btn = $("#ble-connect"), status = $("#ble-status"), list = $("#ble-sessions");
+  const got = new Map();  // cartella → File già scaricato
+  let days = [], shown = 0, busy = false;
+
+  const say = (text, isError = false) => { status.textContent = text; status.classList.toggle("error", isError); };
+  const reset = () => { btn.textContent = "Collega il FlySight via Bluetooth"; list.replaceChildren(); days = []; shown = 0; };
+  fs.onDisconnect = () => { reset(); say("FlySight scollegato."); };
+
+  btn.addEventListener("click", async () => {
+    if (fs.connected) { fs.disconnect(); return; }
+    btn.disabled = true;
+    try {
+      say("Scegli il FlySight nella finestra del browser…");
+      const name = await fs.connect();
+      btn.textContent = "Scollega";
+      say(`Collegato a ${name}. Leggo le cartelle…`);
+      const root = await fs.listDir("/");
+      days = root.filter((e) => e.dir && FOLDER.test(e.name)).map((e) => e.name).sort().reverse();
+      list.replaceChildren(el("div", { class: "ble-days" }), el("div", { class: "ble-actions" }));
+      renderActions();
+      await moreDays();
+      say(days.length ? `Collegato a ${name}.` : `Collegato a ${name}, ma non trovo salti registrati.`);
+    } catch (e) {
+      console.error(e);
+      if (e && e.name === "NotFoundError") say("Nessun FlySight scelto.");
+      else say(bleMessage(e), true);
+      if (fs.connected) fs.disconnect();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // carica i giorni a gruppi di 4, dal più recente
+  async function moreDays() {
+    const target = list.querySelector(".ble-days");
+    const batch = days.slice(shown, shown + 4);
+    shown += batch.length;
+    for (const day of batch) {
+      const times = (await fs.listDir(`/${day}`)).filter((e) => e.dir && FOLDER.test(e.name)).map((e) => e.name).sort().reverse();
+      if (!times.length) continue;
+      const sessions = times.map((t) => sessionOf(day, t));
+      target.append(el("div", { class: "ble-day" },
+        el("p", { class: "ble-day-title" }, sessions[0].when.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long", year: "numeric" })),
+        ...sessions.map((ses) => el("label", { class: "ble-session" },
+          el("input", { type: "checkbox", value: ses.dir, onchange: renderActions }),
+          el("span", { class: "ble-time" }, ses.when.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })),
+          el("span", { class: "ble-note", "data-dir": ses.dir }, got.has(ses.dir) ? "scaricato" : "")))));
+    }
+    renderActions();
+  }
+
+  function renderActions() {
+    const actions = list.querySelector(".ble-actions");
+    if (!actions) return;
+    const n = list.querySelectorAll(".ble-session input:checked").length;
+    actions.replaceChildren(...[
+      el("button", { type: "button", class: "primary", ...(n && !busy ? {} : { disabled: "" }), onclick: download },
+        n ? `Scarica e analizza (${n})` : "Scegli i salti da scaricare"),
+      shown < days.length ? el("button", { type: "button", ...(busy ? { disabled: "" } : {}), onclick: () => moreDays().catch((e) => say(bleMessage(e), true)) }, "Giorni precedenti") : null,
+    ].filter(Boolean));
+  }
+
+  async function download() {
+    const dirs = [...list.querySelectorAll(".ble-session input:checked")].map((c) => c.value);
+    const files = [];
+    busy = true;
+    renderActions();
+    try {
+      for (const [k, dir] of dirs.entries()) {
+        const [, day, time] = dir.split("/");
+        const ses = sessionOf(day, time);
+        const note = list.querySelector(`.ble-note[data-dir="${dir}"]`);
+        if (!got.has(dir)) {
+          const entry = (await fs.listDir(dir)).find((e) => e.name.toUpperCase() === "TRACK.CSV");
+          if (!entry) { if (note) note.textContent = "senza TRACK.CSV"; continue; }
+          const label = `${ses.when.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })} (${k + 1} di ${dirs.length})`;
+          const bytes = await fs.readFile(`${dir}/${entry.name}`, (b) => {
+            const pct = entry.size ? Math.min(100, Math.round((b / entry.size) * 100)) : null;
+            say(`Scarico ${label}… ${pct != null ? pct + "%" : Math.round(b / 1024) + " KB"}`);
+            if (note) note.textContent = pct != null ? `${pct}%` : "";
+          });
+          got.set(dir, new File([bytes], ses.name, { type: "text/csv" }));
+        }
+        const file = got.get(dir);
+        files.push(file);
+        if (note) note.replaceChildren(el("button", { type: "button", class: "linkbtn", onclick: () => saveFile(file) }, "salva CSV"));
+      }
+      say(files.length ? `Scaricati ${files.length} ${files.length === 1 ? "file" : "file"}.` : "Nessun file da analizzare.");
+      if (files.length) await run(files);
+    } catch (e) {
+      console.error(e);
+      say(bleMessage(e), true);
+    } finally {
+      busy = false;
+      renderActions();
+    }
+  }
+}
+
+function saveFile(file) {
+  const url = URL.createObjectURL(file);
+  const a = el("a", { href: url, download: file.name });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function bleMessage(e) {
+  const m = (e && e.message) || String(e);
+  if (e && e.name === "SecurityError") return "Il browser non ha dato il permesso per il Bluetooth.";
+  if (e && e.name === "NetworkError") return "Collegamento non riuscito: rimetti il FlySight in accoppiamento (doppio clic) e riprova.";
+  if (/encrypt|authenticat|insufficient/i.test(m)) return "Il FlySight non è accoppiato: doppio clic sul pulsante (LED verde che pulsa) e ricollegati.";
+  return m;
+}
+
 // ---------------------------------------------------------------- input
 
 function init() {
@@ -507,6 +642,7 @@ function init() {
   }
   document.addEventListener("drop", (e) => { const f = e.dataTransfer && e.dataTransfer.files; if (f && f.length) pick(f); });
   $("#rerun").addEventListener("click", () => run(lastFiles));
+  setupBluetooth();
 }
 init();
 }

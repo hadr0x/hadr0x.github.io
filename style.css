@@ -283,3 +283,75 @@ select, .ppc-settings input[type="number"] {
 #wind td:nth-child(3), #wind th:nth-child(3) { text-align: left; }
 #app .block-head { flex-wrap: wrap; }
 #app .block-head h3 { margin-right: auto; }
+
+/* ------------------------------------------------------------- scheda */
+.sk-meta { display: flex; flex-wrap: wrap; gap: 6px 20px; margin: 0 0 20px; font-size: 13px; }
+.sk-meta div { display: flex; gap: 6px; }
+.sk-meta dt { color: var(--ink-2); }
+.sk-meta dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sk-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px 24px; }
+.sk-bar-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sk-bar-label { font-size: 13px; color: var(--ink-2); font-weight: 600; }
+#edit[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sk-filebtn {
+  position: relative; display: inline-flex; align-items: center; font-size: 14px; padding: 6px 12px;
+  border-radius: 6px; cursor: pointer; background: var(--surface); border: 1px solid var(--axis);
+}
+.sk-filebtn:hover { border-color: var(--accent); }
+.sk-filebtn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sk-filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.sk-local, .sk-edit-hint { font-size: 13px; color: var(--ink-2); margin: 4px 0 0; max-width: 80ch; }
+.sk-edit-hint { padding: 10px 14px; border-left: 3px solid var(--accent); background: var(--band); border-radius: 0 8px 8px 0; }
+
+.sk-section { margin-top: 32px; }
+.sk-section-title { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); font-weight: 600; margin-bottom: 12px; }
+.sk-modules { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 16px; align-items: start; }
+.sk-module { display: flex; flex-direction: column; gap: 10px; }
+.sk-module-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.sk-module-head h3 { margin: 0; }
+.sk-tag { font-size: 12px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.sk-day { font-size: 13px; color: var(--muted); }
+
+.sk-table th, .sk-table td { white-space: normal; text-align: left; vertical-align: top; padding: 7px 10px; }
+.sk-table tbody td:first-child { color: var(--ink); }
+.sk-table td.sk-val { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ink-2); width: 1%; }
+.sk-table td.sk-var { color: var(--accent); font-weight: 600; }
+.sk-table.sk-num td { white-space: nowrap; color: var(--ink-2); }
+.sk-table.sk-num td:first-child { font-weight: 700; color: var(--accent); }
+.sk-table tr.sk-sub td {
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent);
+  padding-top: 12px; background: var(--band);
+}
+.sk-note { margin: 0; font-size: 13px; color: var(--ink-2); padding: 8px 12px; border-left: 3px solid var(--axis); background: var(--page); border-radius: 0 6px 6px 0; }
+.sk-note-dz { border-left-color: var(--c4); }
+
+.sk-week, .sk-rules { margin-top: 32px; }
+.sk-week h2, .sk-rules h2 { margin-bottom: 12px; }
+.sk-week-table td { min-width: 9em; }
+.sk-week-table td.sk-dayname { font-weight: 700; min-width: 0; width: 1%; white-space: nowrap; }
+.sk-slot { display: block; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.sk-hard { color: var(--error); font-weight: 600; }
+.sk-strong { color: var(--ink); font-weight: 600; }
+.sk-easy { color: var(--ink-2); }
+.sk-fly { color: var(--accent); font-weight: 600; }
+.sk-week-note { margin: 10px 0 0; }
+.sk-rules ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; color: var(--ink-2); max-width: 90ch; }
+.sk-rules b { color: var(--ink); }
+
+.sk-editing [data-ed] { outline: 1px dashed var(--axis); outline-offset: 1px; border-radius: 3px; min-width: 1.5em; cursor: text; }
+.sk-editing [data-ed]:focus { outline: 2px solid var(--accent); background: var(--band); }
+.sk-x-col { width: 1%; padding: 4px !important; }
+.sk-x { padding: 2px 8px; font-size: 12px; color: var(--muted); }
+.sk-x:hover { color: var(--error); border-color: var(--error) !important; }
+.sk-add { display: flex; gap: 8px; margin-top: 8px; }
+.sk-add button { font-size: 13px; padding: 4px 10px; }
+
+@media print {
+  .sitenav, .sk-bar, .status, .sk-local, .sk-edit-hint, .sk-add, .sk-x-col { display: none !important; }
+  body { background: #fff; color: #000; font-size: 11px; }
+  main { padding: 0; max-width: none; }
+  .card { border: 1px solid #ccc; break-inside: avoid; padding: 10px; }
+  .sk-modules { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .sk-section { margin-top: 14px; }
+  .scroll { overflow: visible; border: none; }
+}

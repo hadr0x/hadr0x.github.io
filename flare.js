@@ -17,34 +17,6 @@
 const G = 9.80665;
 const KMH = 3.6;
 
-// ------------------------------------------------------------- soglie di giudizio
-// Tarate sui flare con la Squirrel CR+ (ottobre-novembre 2026) e verificate su flare da +87…+158 m di altri piloti.
-// Carico e rotazione nella parte ripida sono riportati a una velocità fissa: a 420 km/h la stessa ala dà molti
-// più g e ruota più in fretta che a 320, senza che il pilota stia tirando di più.
-const V_LOAD = 250 / KMH;  // m/s
-const V_ROT = 300 / KMH;   // m/s
-const T = {
-  vLevel: [210, 230],    // km/h in orizzontale: sotto 210 bassa, sopra 230 ottima
-  steepLoad: [1.85, 2.4], // carico riportato a 250 km/h, massimo finché la picchiata è oltre 25°
-  rot1: [8.5, 12],       // °/s da 45° a 25°, riportati a 300 km/h
-  t45: [3.5, 4.5],       // s da 45° all'orizzontale
-  peakAngle: [12, 22],   // ° di picchiata al momento del picco di carico
-  hold: [1.6, 1.9],      // g un secondo dopo l'orizzontale
-  climb: [14, 20],       // ° di salita massima
-  apex: [90, 100],       // km/h all'apice (margine dallo stallo)
-  eff: [22, 26],         // % efficienza della salita
-};
-
-// Il flare record con la CR+ (+59 m, 8/11/2026): carico riportato a 250 km/h per angolo di traiettoria,
-// da V max alla salita massima.
-const REFERENCE = {
-  label: "Riferimento +59 m",
-  pts: [[-37.8, 1.10], [-36.5, 1.13], [-35.1, 1.16], [-33.7, 1.16], [-32.3, 1.21], [-30.7, 1.29], [-29.0, 1.38],
-    [-27.1, 1.49], [-25.1, 1.56], [-23.1, 1.61], [-21.0, 1.67], [-18.8, 1.75], [-16.6, 1.80], [-14.4, 1.93],
-    [-11.9, 2.10], [-9.3, 2.26], [-6.6, 2.42], [-3.7, 2.60], [-0.7, 2.75], [2.3, 2.89], [5.3, 3.04], [8.3, 3.24],
-    [11.4, 3.42], [14.3, 3.46], [16.8, 3.39], [19.0, 3.27], [20.7, 3.16], [22.2, 3.24], [23.7, 3.33], [24.7, 3.14]],
-};
-
 // Massa in volo e superficie della tuta per i coefficienti della drag polar: cambiano la scala di CL e CD,
 // non la forma della polare né il rapporto L/D.
 const SUIT_DEFAULTS = { mass: 80, area: 2 };
@@ -173,9 +145,6 @@ function polarRange(tr, f) {
   return out;
 }
 
-// carico riportato a 250 km/h: proporzionale al coefficiente di portanza
-function wingLoad(tr, i) { return tr.n[i] * (V_LOAD / tr.vt[i]) ** 2; }
-
 // indice del primo punto con t >= sec
 function idx(tr, sec) {
   let lo = 0, hi = tr.t.length - 1;
@@ -292,22 +261,6 @@ function measure(tr, lv, lo, hi, ground, suit) {
   // V max "già stabile" se negli ultimi 3 s la velocità è salita di meno di 5 km/h
   const vRise = (tr.vt[ipk] - at(tr, tr.vt, tr.t[ipk] - 3)) * KMH;
 
-  // carico massimo nella parte ripida (oltre 25° di picchiata, da V max in poi)
-  let steep = null, steepN = null, steepV = null;
-  for (let i = ipk; i <= lv; i++) {
-    if (da(i) <= 25) continue;
-    const c = tr.n[i] * (V_LOAD / tr.vt[i]) ** 2;
-    if (steepN == null || c > steepN) { steepN = c; steepV = tr.vt[i] * KMH; }
-    steep = Math.max(steep ?? -Infinity, tr.n[i]);
-  }
-  // velocità media tra 45° e 25°, per riportare la rotazione a 300 km/h
-  let vRot = null;
-  if (t45 != null && t25 != null) {
-    let sum = 0, c = 0;
-    for (let i = idx(tr, t45); i <= idx(tr, t25); i++) { sum += tr.vt[i]; c++; }
-    vRot = sum / c;
-  }
-
   const loadAt = (sec) => (sec == null ? null : at(tr, tr.n, sec));
   const byAngle = [
     ...[50, 40, 30, 20, 10].map((A) => ({ label: `${A}° giù`, value: loadAt(crossBack(A)) })),
@@ -329,7 +282,6 @@ function measure(tr, lv, lo, hi, ground, suit) {
     peak: tr.n[pk], peakDt: tr.t[pk] - tl, peakAngle: da(pk),
     nLevel: tr.n[lv],
     n06: loadAt(tl + 0.6), n1: loadAt(tl + 1), n16: loadAt(tl + 1.6),
-    steep, steepN, steepV,
     climb: tr.gam[kmc], climbDt: tr.t[kmc] - tl,
     vApex: vr * KMH, apexDt: tr.t[top] - tl,
     gain,
@@ -339,8 +291,6 @@ function measure(tr, lv, lo, hi, ground, suit) {
     diveLoss: diveDur >= 1 ? tr.alt[ds] - tr.alt[ipk] : null,
     vStable: vRise < 5,
     rot1: t45 != null && t25 != null ? 20 / (t25 - t45) : null,
-    rot1n: vRot != null ? (20 / (t25 - t45)) * (V_ROT / vRot) : null,
-    vRot: vRot != null ? vRot * KMH : null,
     rot2: t25 != null ? 25 / (tl - t25) : null,
     t45: t45 != null ? tl - t45 : null,
     ideal, drag: ideal - gain, eff: ideal > 5 ? (gain / ideal) * 100 : null,
@@ -355,7 +305,6 @@ function measure(tr, lv, lo, hi, ground, suit) {
       { t: tr.t[top] - tl, label: "apice" },
     ],
   };
-  f.verdict = judge(f);
   return f;
 }
 
@@ -369,75 +318,6 @@ function polarStats(tr, f, suit) {
     if (clMax == null || cl > clMax) clMax = cl;
   }
   return { ldMax, ldAtV: ldAt == null ? null : tr.vt[ldAt] * KMH, clMax };
-}
-
-// ===================================================================== giudizio
-
-function grade(v, [a, b], higherIsBetter = true) {
-  if (v == null || !Number.isFinite(v)) return null;
-  if (higherIsBetter) return v >= b ? "ok" : v >= a ? "warn" : "bad";
-  return v <= a ? "ok" : v <= b ? "warn" : "bad";
-}
-
-function judge(f) {
-  const r = (v, d = 0) => (v == null ? "–" : v.toFixed(d).replace(".", ","));
-  const items = [];
-  const add = (level, title, text) => { if (level) items.push({ level, title, text }); };
-
-  add(grade(f.vLevel, T.vLevel), "Velocità in orizzontale",
-    `${r(f.vLevel)} km/h. È il carburante della salita: conta al quadrato. ` +
-    (f.vLevel >= T.vLevel[1] ? "Ottima." : f.vLevel >= T.vLevel[0] ? "Buona, sopra i 230 diventa ottima."
-      : "Bassa: la velocità si è consumata nella richiamata, prima di poterla usare."));
-
-  if (f.steepN != null) {
-    add(grade(f.steepN, T.steepLoad, false), "Parte ripida",
-      `Fino a 25° di picchiata arrivi a ${r(f.steep, 1)} g a ${r(f.steepV)} km/h, cioè ${r(f.steepN, 1)} g riportati a 250 km/h. ` +
-      (f.steepN <= T.steepLoad[0] ? "Leggera, come deve essere." :
-        f.steepN <= T.steepLoad[1] ? "Un po' carica: in questa fase l'ala deve lavorare poco (sotto 1,8 a 250 km/h)." :
-          "Strappo: tanta pressione mentre sei ancora ripido frena e brucia velocità."));
-  }
-  if (f.rot1n != null) {
-    add(grade(f.rot1n, T.rot1, false), "Rotazione da 45° a 25°",
-      `${r(f.rot1, 1)} °/s a ${r(f.vRot)} km/h (${r(f.rot1n, 1)} °/s riportati a 300 km/h), ${r(f.t45, 1)} s da 45° all'orizzontale. ` +
-      (f.rot1n <= T.rot1[0] ? "Paziente, bene." : f.rot1n <= T.rot1[1] ? "Un po' veloce: a 300 km/h punta a 7–8 °/s e 5 s fino all'orizzontale."
-        : "Troppo veloce: è il segno dello strappo."));
-  }
-  add(grade(f.peakAngle, T.peakAngle, false), "Picco di carico",
-    `${r(f.peak, 1)} g quando eri a ${r(Math.max(0, f.peakAngle))}° di picchiata (${r(f.peakDt, 1)} s). ` +
-    (f.peakAngle <= T.peakAngle[0] ? "Nel posto giusto, a cavallo dell'orizzonte." :
-      f.peakAngle <= T.peakAngle[1] ? "Un po' presto: spostalo verso l'orizzonte." : "Troppo presto, nella parte ripida."));
-  add(grade(f.n1, T.hold), "Dopo l'orizzonte",
-    `${r(f.n1, 1)} g un secondo dopo. ` +
-    (f.n1 >= T.hold[1] ? "Hai tenuto la pressione." : f.n1 >= T.hold[0] ? "Cala un po' presto: continua a ruotare per 2 s."
-      : "Hai mollato all'orizzonte: la salita resta piatta."));
-  add(grade(f.climb, T.climb), "Salita",
-    `Massimo ${r(f.climb)}° dopo ${r(f.climbDt, 1)} s. ` +
-    (f.climb >= T.climb[1] ? "Decisa." : f.climb >= T.climb[0] ? "Discreta: con la CR+ punta a 20–25°." : "Piatta."));
-  if (f.eff != null) {
-    add(grade(f.eff, T.eff), "Efficienza della salita",
-      `${r(f.eff)}%: ${r(f.gain)} m su ${r(f.ideal)} m teorici (${r(f.drag)} m persi per resistenza). ` +
-      (f.eff >= 35 ? "Molto alta, sopra i flare migliori con la CR+ (~28%)." : f.eff >= T.eff[1] ? "In linea con i flare migliori (~28%)." : "Bassa: hai perso energia volando in piano invece di salire."));
-  }
-  add(grade(f.vApex, T.apex), "Margine allo stallo",
-    `${r(f.vApex)} km/h all'apice. ` +
-    (f.vApex >= T.apex[1] ? "Margine buono." : f.vApex >= T.apex[0] ? "Attenzione: inizia a rilasciare un attimo prima."
-      : "Molto lento, sei vicino allo stallo: rilascia prima."));
-
-  // consiglio principale: il primo problema nell'ordine del flare
-  const order = ["Parte ripida", "Rotazione da 45° a 25°", "Velocità in orizzontale", "Picco di carico",
-    "Dopo l'orizzonte", "Salita", "Margine allo stallo"];
-  const ADVICE = {
-    "Parte ripida": "Nella parte ripida pressione leggera: lascia correre la velocità e tieni la spinta forte per gli ultimi 20°.",
-    "Rotazione da 45° a 25°": "Ruota più piano finché sei ripido: da 45° all'orizzontale prenditi almeno 5 secondi.",
-    "Velocità in orizzontale": "Arriva più veloce in orizzontale: picchiata più lunga e richiamata più leggera all'inizio.",
-    "Picco di carico": "Sposta la spinta più forte verso l'orizzonte, non prima.",
-    "Dopo l'orizzonte": "Non mollare all'orizzonte: continua a ruotare per 2 secondi, fino a 20–25° di salita.",
-    "Salita": "Continua a ruotare dopo l'orizzonte per salire più ripido.",
-    "Margine allo stallo": "Inizia il rilascio prima dell'apice: sei vicino allo stallo.",
-  };
-  const worst = (lvl) => order.find((t) => items.some((i) => i.title === t && i.level === lvl));
-  const key = worst("bad") ?? worst("warn");
-  return { items, advice: key ? ADVICE[key] : "Flare pulito: ripetilo uguale e prova ad arrivare ancora più veloce in orizzontale." };
 }
 
 if (typeof module !== "undefined") module.exports = { parseTrack, analyzeTrack, buildTrack, coeffs, polarRange };
@@ -505,12 +385,12 @@ function el(tag, attrs = {}, ...children) {
   return node;
 }
 
-const SUMMARY_HEADERS = ["flare", "quota orizz. (m)", "picchiata (°)", "V max", "V orizz.", "carico ripida (g a 250 km/h)",
-  "rot. 45→25 (°/s a 300 km/h)", "45°→orizz. (s)", "picco g", "picco a (° giù)", "g +1 s", "salita max (°)", "V apice",
+const SUMMARY_HEADERS = ["flare", "quota orizz. (m)", "picchiata (°)", "V max", "V orizz.",
+  "rot. 45→25 (°/s)", "45°→orizz. (s)", "picco g", "picco a (° giù)", "g +1 s", "salita max (°)", "V apice",
   "guadagno (m)", "ideale (m)", "efficienza (%)", "L/D max", "CL max"];
 
 function summaryRow(label, f) {
-  return [label, nf(f.altLevel), nf(f.dive), nf(f.vmax), nf(f.vLevel), nf(f.steepN, 1), nf(f.rot1n, 1), nf(f.t45, 1),
+  return [label, nf(f.altLevel), nf(f.dive), nf(f.vmax), nf(f.vLevel), nf(f.rot1, 1), nf(f.t45, 1),
     nf(f.peak, 2), nf(Math.max(0, f.peakAngle)), nf(f.n1, 2), nf(f.climb), nf(f.vApex), signed(f.gain, 1),
     nf(f.ideal), nf(f.eff), nf(f.ldMax, 2), nf(f.clMax, 2)];
 }
@@ -525,7 +405,6 @@ const SUMMARY = [
     value: (f) => f.vmax, best: "max" },
   { label: "Rotazione 45°→25°", text: (f) => (f.rot1 == null ? "–" : `${nf(f.rot1, 1)} °/s`), value: (f) => f.rot1, best: "min" },
   { label: "Da 45° all'orizzontale", text: (f) => (f.t45 == null ? "–" : `${nf(f.t45, 1)} s`), value: (f) => f.t45, best: "max" },
-  { label: "Carico nella parte ripida (riportato a 250 km/h)", text: (f) => nf(f.steepN, 1), value: (f) => f.steepN, best: "min" },
   { label: "V in orizzontale", text: (f) => `${nf(f.vLevel)} km/h`, value: (f) => f.vLevel, best: "max" },
   { label: "Picco di carico",
     text: (f) => `${nf(f.peak, 1)} g ${Math.abs(f.peakAngle) < 1 ? "esattamente all'orizzonte"
@@ -616,15 +495,6 @@ function fileCard(r) {
   return card;
 }
 
-function stat(label, value, unit, sub) {
-  return el("div", { class: "kpi" }, el("span", { class: "kpi-label" }, label),
-    el("span", { class: "kpi-value" }, value, unit ? el("small", {}, ` ${unit}`) : null),
-    sub ? el("span", { class: "kpi-sub" }, sub) : null);
-}
-
-const ICON = { ok: "✓", warn: "!", bad: "✕" };
-const WORD = { ok: "bene", warn: "da migliorare", bad: "problema" };
-
 function flareBlock(tr, f, n, r) {
   const from = Math.max(r.lo, idx(tr, Math.min(tr.t[f.ipk] - 1, f.tLevel - 8)));
   const to = Math.min(r.hi, idx(tr, tr.t[f.top] + 1));
@@ -632,32 +502,10 @@ function flareBlock(tr, f, n, r) {
   const x = range.map((i) => tr.t[i] - f.tLevel);
   const marks = f.marks;
 
-  const ang = range.filter((i) => i >= f.ipk && i <= f.kmc);
-  const verdict = f.verdict;
-
   return el("div", { class: "flare" },
     el("div", { class: "block-head" }, el("h3", {}, `Flare ${n}`),
       el("span", { class: "hint" }, `orizzontale a ${nf(tr.t[f.lv], 1)} s · ${nf(f.altLevel)} m`)),
-    el("div", { class: "kpis" },
-      stat("Guadagno", signed(f.gain, 1), "m", `ideale ${nf(f.ideal)} m · efficienza ${nf(f.eff)}%`),
-      stat("V in orizzontale", nf(f.vLevel), "km/h", `da V max ${nf(f.vmax)} a ${nf(f.dive)}°`),
-      stat("Picco di carico", nf(f.peak, 1), "g", `a ${nf(Math.max(0, f.peakAngle))}° di picchiata`),
-      stat("Dopo 1 s", nf(f.n1, 1), "g", `salita max ${nf(f.climb)}°`),
-      stat("Apice", nf(f.vApex), "km/h", `${nf(f.apexDt, 1)} s dopo l'orizzontale`),
-      stat("L/D massimo", nf(f.ldMax, 2), "", `a ${nf(f.ldAtV)} km/h · CL max ${nf(f.clMax, 2)}`)),
-    el("div", { class: "verdict" },
-      el("p", { class: "advice" }, el("b", {}, "Prossimo salto: "), verdict.advice),
-      el("ul", { class: "checks" }, ...verdict.items.map((it) =>
-        el("li", { class: it.level },
-          el("span", { class: "badge", "aria-hidden": "true" }, ICON[it.level]),
-          el("span", {}, el("b", {}, it.title), el("span", { class: "sr" }, ` (${WORD[it.level]})`), ": ", it.text))))),
     el("div", { class: "flare-grid" },
-      el("div", {},
-        el("p", { class: "chart-title" }, "Quanto lavora l'ala: carico riportato a 250 km/h (g) · ← picchiata · salita →"),
-        xyChart({ traces: [
-          { label: "Questo flare", color: "var(--s1)", x: ang.map((i) => tr.gam[i]), y: ang.map((i) => wingLoad(tr, i)), t: ang.map((i) => tr.t[i] - f.tLevel) },
-          { label: REFERENCE.label, color: "var(--muted)", dash: true, x: REFERENCE.pts.map((p) => p[0]), y: REFERENCE.pts.map((p) => p[1]), t: REFERENCE.pts.map(() => NaN) }],
-          xName: "angolo traiettoria", yName: "carico a 250 km/h", xUnit: "°", yUnit: "g", minH: 220, maxH: 300, digits: 1 })),
       el("div", {},
         el("p", { class: "chart-title" }, "Dive angle (°) come in FlySight Viewer · negativo = salita"),
         lineChart({ x, unit: "°", xUnit: "s", height: 240, marks, zero: true,
@@ -667,13 +515,13 @@ function flareBlock(tr, f, n, r) {
         lineChart({ x, unit: "g", xUnit: "s", height: 240, marks, digits: 2, zero: true,
           series: [{ label: "Carico", color: "var(--s1)", values: range.map((i) => tr.n[i]) }] })),
       el("div", {},
-        el("p", { class: "chart-title" }, "Velocità totale (km/h)"),
-        lineChart({ x, unit: "km/h", xUnit: "s", height: 240, marks,
-          series: [{ label: "V totale", color: "var(--s1)", values: range.map((i) => tr.vt[i] * KMH) }] })),
-      el("div", {},
         el("p", { class: "chart-title" }, "Drag polar · da V max all'apice · rette a L/D costante"),
         polarChart([polarTrace(r, f, "", "var(--s1)", true)])),
       el("div", {},
+        el("p", { class: "chart-title" }, "Velocità totale (km/h)"),
+        lineChart({ x, unit: "km/h", xUnit: "s", height: 240, marks,
+          series: [{ label: "V totale", color: "var(--s1)", values: range.map((i) => tr.vt[i] * KMH) }] })),
+      el("div", { class: "wide" },
         el("p", { class: "chart-title" }, "Profilo laterale (m) · 0 = punto in cui diventi orizzontale"),
         xyChart({ traces: [{ label: "", color: "var(--s1)", x: range.map((i) => tr.dist[i] - tr.dist[f.lv]),
           y: range.map((i) => tr.alt[i] - tr.alt[f.bot]), t: x }],
@@ -721,22 +569,21 @@ function overlay(all) {
     boxes.querySelectorAll("input").forEach((cb, i) => { cb.disabled = chosen[i] == null && used >= FLARE_COLORS.length; });
     const sel = all.flatMap((a, i) => (chosen[i] == null ? [] : [{ ...a, color: FLARE_COLORS[chosen[i]] }]));
     if (!sel.length) { charts.replaceChildren(el("p", { class: "hint" }, "Nessun flare selezionato.")); return; }
-    const traceAng = sel.map(({ r, f, label, color }) => {
-      const tr = r.tr; const ix = []; for (let i = f.ipk; i <= f.kmc; i++) ix.push(i);
-      return { label, color, x: ix.map((i) => tr.gam[i]), y: ix.map((i) => wingLoad(tr, i)), t: ix.map((i) => tr.t[i] - f.tLevel) };
-    });
-    const traceDive = sel.map(({ r, f, label, color }) => {
+    // da 7 s prima a 5 s dopo l'orizzontale, con 0 s = orizzontale
+    const timeTrace = (val) => sel.map(({ r, f, label, color }) => {
       const tr = r.tr; const ix = [];
       for (let i = Math.max(r.lo, idx(tr, f.tLevel - 7)); i <= Math.min(r.hi, idx(tr, f.tLevel + 5)); i++) ix.push(i);
-      return { label, color, x: ix.map((i) => tr.t[i] - f.tLevel), y: ix.map((i) => -tr.gam[i]), t: ix.map((i) => tr.t[i] - f.tLevel) };
+      return { label, color, x: ix.map((i) => tr.t[i] - f.tLevel), y: ix.map((i) => val(tr, i)), t: ix.map((i) => tr.t[i] - f.tLevel) };
     });
     charts.replaceChildren(
       el("div", { class: "wide" }, el("p", { class: "chart-title" }, "Drag polar · da V max all'apice · rette a L/D costante"),
         polarChart(sel.map(({ r, f, label, color }) => polarTrace(r, f, label, color)), { legend: false, maxH: 380 })),
-      el("div", {}, el("p", { class: "chart-title" }, "Quanto lavora l'ala: carico riportato a 250 km/h (g) · ← picchiata · salita →"),
-        xyChart({ traces: traceAng, xName: "angolo traiettoria", yName: "carico a 250 km/h", xUnit: "°", yUnit: "g", minH: 240, maxH: 320, digits: 1, legend: false })),
       el("div", {}, el("p", { class: "chart-title" }, "Dive angle (°) · 0 s = orizzontale"),
-        xyChart({ traces: traceDive, xName: "secondi", yName: "dive angle", xUnit: "s", yUnit: "°", minH: 240, maxH: 320, legend: false })));
+        xyChart({ traces: timeTrace((tr, i) => -tr.gam[i]), xName: "secondi", yName: "dive angle", xUnit: "s", yUnit: "°",
+          minH: 240, maxH: 320, legend: false })),
+      el("div", {}, el("p", { class: "chart-title" }, "Carico sulle ali (g) · 0 s = orizzontale"),
+        xyChart({ traces: timeTrace((tr, i) => tr.n[i]), xName: "secondi", yName: "carico", xUnit: "s", yUnit: "g",
+          minH: 240, maxH: 320, digits: 2, legend: false })));
   }
   all.forEach((a, i) => {
     const key = el("i", { class: "key" });
